@@ -21,6 +21,5 @@ After that, you can install the required packages for espnet and transformers:
 ```
 pip install espnet==202402 torchaudio
 pip install espnet_model_zoo
-pip install transformers
 ```
 
