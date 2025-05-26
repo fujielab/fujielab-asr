@@ -5,9 +5,9 @@ from fujielab_asr.espnet2.bin.asr_transducer_inference_cbs import Speech2Text
 from scipy.signal import resample
 
 # Jpaanese Pronounciation Combined with Dysfluencies Token Model
-# model_name = "fujie/espnet_asr_cbs_transducer_120303_hop132_cc0105"
+model_name = "fujie/espnet_asr_cbs_transducer_120303_hop132_cc0105"
 # Jpaanese Written Character and Special Tokens for Dysfluencies Model
-model_name = "fujie/kobori_espnet_0220_transcript-enriched_shojikei_transducer"
+# model_name = "fujie/kobori_espnet_0220_transcript-enriched_shojikei_transducer"
 
 s2t = Speech2Text.from_pretrained(
     model_name,
