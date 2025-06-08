@@ -19,12 +19,12 @@ from typeguard import check_argument_types, check_return_type
 #     BeamSearchTransducer,
 #     Hypothesis,
 # )
-from fujielab_asr.espnet2.asr.beam_search_transducer_online import (
+from fujielab.asr.espnet_ext.espnet2.asr.beam_search_transducer_online import (
     BeamSearchTransducer,
     Hypothesis,
 )
 # from espnet2.asr_transducer.frontend.online_audio_processor import OnlineAudioProcessor
-from fujielab_asr.espnet2.asr.frontend.online_audio_processor import OnlineAudioProcessor
+from fujielab.asr.espnet_ext.espnet2.asr.frontend.online_audio_processor import OnlineAudioProcessor
 from espnet2.asr_transducer.utils import TooShortUttError
 from espnet2.fileio.datadir_writer import DatadirWriter
 # from espnet2.tasks.asr_transducer import ASRTransducerTask
