@@ -1,6 +1,6 @@
 [project]
 name = "fujielab-asr"
-version = "0.1.0"
+version = "0.1.2"
 description = "Automatic Speech Recognition (ASR) tools for Fujie Lab"
 readme = "README.md"
 requires-python = ">=3.11, <3.12"
@@ -12,6 +12,9 @@ dependencies = [
     "espnet_model_zoo",
     "torchaudio",
 ]
+
+[project.urls]
+homepage = "https://github.com/fujielab/fujielab-asr"
 
 [build-system]
 requires = ["setuptools", "setuptools_scm"]
