@@ -202,3 +202,4 @@ Temporary Items
 
 # Local files that should not be committed
 examples/aps-smp.mp3
+examples/.gradio/certificate.pem
