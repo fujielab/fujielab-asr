@@ -4,11 +4,11 @@ from fujielab.asr.espnet_ext.espnet2.bin.asr_transducer_inference_cbs import Spe
 from scipy.signal import resample
 from os import path
 
-# Jpaanese Pronounciation Combined with Disfluencies Token Model (ESPnet 202402 required)
+# Japanese Pronunciation Combined with Dysfluencies Token Model (ESPnet 202402 required)
 model_name = "fujie/espnet_asr_cbs_transducer_120303_hop132_cc0105"
-# Jpaanese Written Form Combined with Disfluencies Token Model (ESPnet 202402 required)
+# Japanese Kanji Combined with Dysfluencies Token Model (ESPnet 202402 required)
 # model_name = "fujie/espnet_asr_csj_writ_aux_cbs_transducer_081616_hop132"
-# Jpaanese Written Character and Special Tokens for Disfluencies Model (ESPnet 202301 required)
+# Japanese Written Character and Special Tokens for Disfluencies Model (ESPnet 202301 required)
 # model_name = "fujie/kobori_espnet_0220_transcript-enriched_shojikei_transducer"
 
 s2t = Speech2Text.from_pretrained(
