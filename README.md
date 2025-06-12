@@ -35,5 +35,7 @@ pip install -e .
 
 Check the example scripts in the `examples` directory.
 - `examples/run_streaming_asr.py`: Example of streaming ASR.
+- `examples/run_streaming_asr_live.py`: Example of live streaming ASR.
+- `examples/demo.py`: Gradio demo for speech recognition.
 
 
