@@ -10,7 +10,7 @@ Automatic Speech Recognition Modules for Fujie Laboratory based on ESPnet.
 
 ### Requirements
 
-- Python 3.11 (later versions may not work, because of the dependency on ESPnet)
+ - Python >=3.10,<3.12 (later versions may not work, because of the dependency on ESPnet)
 - ESPnet (202301 or later) required version is different for a model you want to use
 
 ### Installation with pip
