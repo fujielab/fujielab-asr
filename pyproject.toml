@@ -1,12 +1,38 @@
 [project]
 name = "fujielab-asr"
-version = "0.1.4"
-description = "Automatic Speech Recognition (ASR) tools for Fujie Lab"
+version = "0.1.5"
+description = "Streaming Automatic Speech Recognition (ASR) tools for Fujie Lab, built on ESPnet"
 readme = "README.md"
-requires-python = ">=3.10, <3.12"
+requires-python = ">=3.10, <3.13"
 authors = [
     {name = "Shinya Fujie", email = "shinya.fujie@p.chibakoudai.jp"}]
-license = {file = "LICENSE"}
+maintainers = [
+    {name = "Shinya Fujie", email = "shinya.fujie@p.chibakoudai.jp"}]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+keywords = [
+    "asr",
+    "speech-recognition",
+    "espnet",
+    "streaming",
+    "transducer",
+    "ctc",
+    "japanese",
+    "disfluency",
+    "filler",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Natural Language :: Japanese",
+]
 dependencies = [
     "espnet>=202412",
     "espnet_model_zoo",
@@ -14,7 +40,9 @@ dependencies = [
 ]
 
 [project.urls]
-homepage = "https://github.com/fujielab/fujielab-asr"
+Homepage = "https://github.com/fujielab/fujielab-asr"
+Repository = "https://github.com/fujielab/fujielab-asr"
+Issues = "https://github.com/fujielab/fujielab-asr/issues"
 
 [build-system]
 requires = ["setuptools", "setuptools_scm"]
