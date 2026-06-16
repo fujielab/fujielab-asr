@@ -10,11 +10,15 @@ Hugging Face Hub. It is designed for **online / chunk-by-chunk** recognition.
 ## Features
 
 - **Streaming ASR** with a Contextual Block Streaming (CBS) encoder.
-- Two recognizer families:
+- Recognizer families:
   - **RNN-Transducer** (`Speech2Text`) — streaming beam search.
   - **CTC-only multitask** (`Speech2TextMultitaskCTC`) — streaming greedy CTC that,
     in addition to the transcript, predicts a per-token **auxiliary-information
-    label**: `N` (normal), `F` (filler / フィラー), `D` (repair / 言い直し).
+    label** via a separate head: `N` (normal), `F` (filler / フィラー),
+    `D` (repair / 言い直し).
+  - **CTC-only** (`Speech2TextCTC`) — streaming greedy CTC for models whose
+    auxiliary markers are part of the recognized tokens (composite `あ+F` / `チ+D`,
+    or span `<F> あ の </F>`).
 - Pretrained Japanese models distributed via the Hugging Face Hub
   (loaded with `from_pretrained`).
 
@@ -60,16 +64,25 @@ emit `F`/`D` markers for fillers and repairs.)
 
 | Tag | Type | Tokens | Corpus |
 |-----|------|--------|--------|
-| `fujie/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132` | **CTC multitask (N/F/D)** | kana | CSJ |
+| `fujie/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132` | **CTC multitask (N/F/D head)** | kana | CSJ |
+| `fujie/espnet_asr_csj_pron_comp_cbs_ctc_120300_hop132` | **CTC composite (`あ+F`/`チ+D`)** | kana | CSJ |
+| `fujie/espnet_asr_csj_pron_span_cbs_ctc_120300_hop132` | **CTC span (`<F> あ </F>`)** | kana | CSJ |
 | `fujie/espnet_asr_cejc_pron_aux_cbs_transducer_081616_hop132` | Transducer | kana | CEJC |
 | `fujie/espnet_asr_csj_writ_aux_cbs_transducer_081616_hop132` | Transducer | kanji | CSJ |
 | `fujie/espnet_asr_cbs_transducer_120303_hop132_cc0105` | Transducer | kana | CEJC+CSJ |
+
+The three CSJ pron CTC models (multitask / composite / span) share the same
+encoder and were trained on the same utterances — three encodings of the same
+filler/repair information. On CSJ eval, content CER is ~equal (≈6.7–6.8%);
+filler detection F1 ≈93 for all; repair detection F1 is composite ≈ multitask >
+span.
 
 ## Example Usage
 
 Runnable scripts are in the `examples/` directory:
 
 - `examples/run_streaming_asr.py` — streaming Transducer ASR.
+- `examples/run_streaming_asr_ctc.py` — streaming **CTC** ASR (composite / span markers in tokens).
 - `examples/run_streaming_asr_multitask.py` — streaming **CTC multitask** ASR
   (transcript + filler/repair labels).
 - `examples/run_streaming_asr_live.py` — live (microphone) streaming ASR.
