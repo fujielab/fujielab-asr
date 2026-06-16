@@ -1,6 +1,6 @@
 [project]
 name = "fujielab-asr"
-version = "0.1.5"
+version = "0.1.6"
 description = "Streaming Automatic Speech Recognition (ASR) tools for Fujie Lab, built on ESPnet"
 readme = "README.md"
 requires-python = ">=3.10, <3.13"
