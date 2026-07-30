@@ -1,6 +1,6 @@
 """Search algorithms for Transducer models."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -19,6 +19,11 @@ class Hypothesis:
         yseq: Label sequence as integer ID sequence.
         dec_state: RNN/MEGA Decoder state (None if Stateless).
         lm_state: RNNLM state. ((N, D_lm), (N, D_lm)) or None
+        emit_frames: Encoder frame at which each token of ``yseq[1:]`` was
+            emitted, counted from the start of the stream (not of the current
+            chunk). Needed by the multitask models to read their auxiliary head
+            at the emitting (t, u) lattice node; plain Transducer decoding
+            ignores it. Same length as ``yseq[1:]``.
 
     """
 
@@ -26,6 +31,7 @@ class Hypothesis:
     yseq: List[int]
     dec_state: Optional[Tuple[torch.Tensor, Optional[torch.Tensor]]] = None
     lm_state: Optional[Union[Dict[str, Any], List[Any]]] = None
+    emit_frames: List[int] = field(default_factory=list)
 
 
 @dataclass
@@ -167,6 +173,11 @@ class BeamSearchTransducer:
 
         hyps = self.search_algorithm(enc_out)
 
+        # Frame indices recorded in Hypothesis.emit_frames are stream-absolute,
+        # but the search only ever sees the current chunk, so advance the origin
+        # once the chunk has been consumed.
+        self.frame_offset += len(enc_out)
+
         if is_final:
             self.reset_cache()
 
@@ -180,6 +191,7 @@ class BeamSearchTransducer:
         """Reset cache for streaming decoding."""
         self.decoder.score_cache = {}
         self.search_cache = None
+        self.frame_offset = 0
 
     def sort_nbest(self, hyps: List[Hypothesis]) -> List[Hypothesis]:
         """Sort in-place hypotheses by score or score given sequence length.
@@ -342,6 +354,7 @@ class BeamSearchTransducer:
                         yseq=max_hyp.yseq,
                         dec_state=max_hyp.dec_state,
                         lm_state=max_hyp.lm_state,
+                        emit_frames=max_hyp.emit_frames,
                     )
                 )
 
@@ -368,6 +381,8 @@ class BeamSearchTransducer:
                             yseq=max_hyp.yseq + [int(k + 1)],
                             dec_state=state,
                             lm_state=lm_state,
+                            emit_frames=max_hyp.emit_frames
+                            + [self.frame_offset + t],
                         )
                     )
 
@@ -446,6 +461,7 @@ class BeamSearchTransducer:
                         yseq=hyp.yseq[:],
                         dec_state=hyp.dec_state,
                         lm_state=hyp.lm_state,
+                        emit_frames=hyp.emit_frames[:],
                     )
 
                     A.append(new_hyp)
@@ -459,6 +475,9 @@ class BeamSearchTransducer:
                             yseq=(hyp.yseq[:] + [int(k)]),
                             dec_state=self.decoder.select_state(beam_state, i),
                             lm_state=hyp.lm_state,
+                            # in ALSD each hypothesis sits on its own frame
+                            emit_frames=hyp.emit_frames[:]
+                            + [self.frame_offset + B_enc_out[i][0]],
                         )
 
                         if self.use_lm:
@@ -501,7 +520,7 @@ class BeamSearchTransducer:
             if self.use_lm:
                 B[0].lm_state = self.lm.zero_state()
 
-        for enc_out_t in enc_out:
+        for t, enc_out_t in enumerate(enc_out):
             A = []
             C = B
 
@@ -528,6 +547,7 @@ class BeamSearchTransducer:
                                 yseq=hyp.yseq[:],
                                 dec_state=hyp.dec_state,
                                 lm_state=hyp.lm_state,
+                                emit_frames=hyp.emit_frames[:],
                             )
                         )
                     else:
@@ -552,6 +572,8 @@ class BeamSearchTransducer:
                                 yseq=(hyp.yseq + [int(k)]),
                                 dec_state=self.decoder.select_state(beam_state, i),
                                 lm_state=hyp.lm_state,
+                                emit_frames=hyp.emit_frames
+                                + [self.frame_offset + t],
                             )
 
                             if self.use_lm:
@@ -625,7 +647,7 @@ class BeamSearchTransducer:
                 )
             ]
 
-        for enc_out_t in enc_out:
+        for t, enc_out_t in enumerate(enc_out):
             hyps = kept_hyps
             kept_hyps = []
 
@@ -655,12 +677,14 @@ class BeamSearchTransducer:
                             dec_state=hyp.dec_state,
                             lm_state=hyp.lm_state,
                             lm_score=hyp.lm_score,
+                            emit_frames=hyp.emit_frames[:],
                         )
 
                         if k == 0:
                             list_b.append(new_hyp)
                         else:
                             new_hyp.yseq.append(int(k))
+                            new_hyp.emit_frames.append(self.frame_offset + t)
 
                             if self.use_lm:
                                 new_hyp.score += self.lm_weight * float(hyp.lm_score[k])
