@@ -47,10 +47,12 @@ chunk_size = 16000 * 1/10  # 100ms
 final_text = ""
 for i in range(0, num_samples, int(chunk_size)):
     chunk = audio[i:i+int(chunk_size)]
-    is_final = False
+    # Flag the last chunk by position, not by whether it came out short: when the
+    # audio length is a multiple of the chunk size no chunk is ever short, so
+    # testing the length alone means the recognizer is never told to flush.
+    is_final = i + int(chunk_size) >= num_samples
     if len(chunk) < int(chunk_size):
         chunk = np.pad(chunk, (0, int(chunk_size) - len(chunk)), "constant")
-        is_final = True
     hyps = s2t.streaming_decode(chunk, is_final=is_final)
     results = s2t.hypotheses_to_results(hyps)
     if len(results) > 0:

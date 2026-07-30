@@ -47,10 +47,12 @@ chunk_size = int(16000 * 1 / 10)  # 100 ms
 final_result = None
 for i in range(0, num_samples, chunk_size):
     chunk = audio[i : i + chunk_size]
-    is_final = False
+    # Flag the last chunk by position, not by whether it came out short: when the
+    # audio length is a multiple of the chunk size no chunk is ever short, so
+    # testing the length alone means the recognizer is never told to flush.
+    is_final = i + chunk_size >= num_samples
     if len(chunk) < chunk_size:
         chunk = np.pad(chunk, (0, chunk_size - len(chunk)), "constant")
-        is_final = True
     results = s2t.streaming_decode(chunk, is_final=is_final)
     if results:
         r = results[0]
