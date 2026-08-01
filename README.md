@@ -74,6 +74,9 @@ emit `F`/`D` markers for fillers and repairs.)
 | `fujie/espnet_asr_csj_cejc_pron_aux_cbs_transducer_120300_hop132` | **Transducer multitask (N/F/D head)** | kana | CSJ+CEJC |
 | `fujie/espnet_asr_csj_cejc_pron_comp_cbs_transducer_120300_hop132` | **Transducer composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
 | `fujie/espnet_asr_csj_cejc_pron_span_cbs_transducer_120300_hop132` | **Transducer span (`<F> あ </F>`)** | kana | CSJ+CEJC |
+| `fujie/espnet_asr_csj_cejc_pron_aux_cbs_ctc_120300_hop132` | **CTC multitask (N/F/D head)** | kana | CSJ+CEJC |
+| `fujie/espnet_asr_csj_cejc_pron_comp_cbs_ctc_120300_hop132` | **CTC composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
+| `fujie/espnet_asr_csj_cejc_pron_span_cbs_ctc_120300_hop132` | **CTC span (`<F> あ </F>`)** | kana | CSJ+CEJC |
 | `fujie/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132` | CTC multitask (N/F/D head) | kana | CSJ |
 | `fujie/espnet_asr_csj_pron_comp_cbs_ctc_120300_hop132` | CTC composite | kana | CSJ |
 | `fujie/espnet_asr_csj_pron_span_cbs_ctc_120300_hop132` | CTC span | kana | CSJ |
@@ -81,30 +84,45 @@ emit `F`/`D` markers for fillers and repairs.)
 | `fujie/espnet_asr_csj_writ_aux_cbs_transducer_081616_hop132` | Transducer | kanji | CSJ |
 | `fujie/espnet_asr_cbs_transducer_120303_hop132_cc0105` | Transducer | kana | CEJC+CSJ |
 
-### The three CSJ+CEJC Transducer models
+### The six CSJ+CEJC models
 
-Same encoder, same data, same schedule (50 epochs) — only the encoding of the
-filler/repair information differs. CER below is measured **with all auxiliary
-information stripped from both sides**, so the three are scored against one
-target; charging `comp`/`span` for the markup they must emit and `aux` for none
-made an earlier comparison look like a 2–3 point gap when the real gap is under
-half a point.
+Three encodings of the filler/repair information × two heads. All six share the
+encoder, data, effective batch and schedule (50 epochs × 1400 steps), so both
+axes are controlled comparisons.
 
-| Tag suffix | CER % | F F1 | D F1 |
-|---|---:|---:|---:|
-| `aux` | **16.01** | 81.9 | 44.4 |
-| `comp` | 16.25 | **82.0** | **45.5** |
-| `span` | 16.41 | 81.5 | 43.9 |
+CER is measured **with all auxiliary information stripped from both sides**, so
+every model is scored against one target; charging `comp`/`span` for the markup
+they must emit and `aux` for none made an earlier comparison look like a 2–3
+point gap when the real gap is well under half a point.
 
-A paired bootstrap over 23,500 utterances calls every pairwise CER gap
-significant, but the `comp` vs `span` gap flips sign between the 14- and
-50-epoch checkpoints, so run-to-run variance exceeds it — treat those two as
-indistinguishable. `D` recall is 35–38 % for all three, the weak point of the
-set.
+| Encoding | RNN-T CER % | CTC CER % | RNN-T F/D F1 | CTC F/D F1 |
+|---|---:|---:|---:|---:|
+| `aux` | **16.01** | 16.90 | 81.9 / 44.4 | 81.6 / 43.1 |
+| `comp` | 16.25 | 17.64 | **82.0** / **45.5** | 80.4 / 44.3 |
+| `span` | 16.41 | **16.74** | 81.5 / 43.9 | 81.3 / 41.6 |
 
-The older CSJ pron **CTC** trio (multitask / composite / span) is the same
-three-way comparison on a CTC recognizer: content CER ≈6.7–6.8 % on CSJ eval,
-filler F1 ≈93.
+**Head**: RNN-T beats CTC on every encoding (+0.33 to +1.39 points, each
+significant under a paired bootstrap over 23,500 utterances), but the margin
+varies fourfold by encoding, so there is no single figure for it. Pick CTC for a
+smaller, decoder-free, greedy-decoding model; pick RNN-T for the best transcript.
+
+**Encoding**: the ordering flips between heads (RNN-T `aux` < `comp` < `span`;
+CTC `span` < `aux` < `comp`), and the `comp` vs `span` gap also flips sign
+between the 14- and 50-epoch RNN-T checkpoints. Run-to-run variance exceeds
+these gaps — do not read a ranking into them.
+
+**Auxiliary labels barely depend on either choice**: `F` F1 spans 80.4–82.0 and
+`D` F1 spans 41.6–45.5 across all six. `D` recall is 34–38 % everywhere, the
+weak point of the whole set, and not something a different head or encoding
+fixes.
+
+One practical caveat: greedy CTC has nothing tying an opening span tag to its
+closing one, so the CTC `span` model returns malformed markup on **11.1 %** of
+utterances (RNN-T `span`: 2.8 %). Parse `<F>`/`<D>` as *set current label* and
+`</F>`/`</D>` as *clear it* rather than assuming balanced brackets.
+
+The older CSJ-only **CTC** trio is the same three-way encoding comparison on
+CSJ alone: content CER ≈6.7–6.8 %, filler F1 ≈93.
 
 ## Example Usage
 
