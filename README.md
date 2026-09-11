@@ -21,6 +21,11 @@ Hugging Face Hub. It is designed for **online / chunk-by-chunk** recognition.
   - **CTC-only** (`Speech2TextCTC`) — streaming greedy CTC for models whose
     auxiliary markers are part of the recognized tokens (composite `あ+F` / `チ+D`,
     or span `<F> あ の </F>`).
+  - **Whisper large-v3 + LoRA** (`Speech2TextWhisper`) — Whisper adapted with LoRA
+    to the same mora + marker output (`token_type whisper_mora`), with an optional
+    **block-causal encoder** (100 ms chunks, bounded look-ahead) for streaming use.
+    Utterance-level decoding today; a chunk-by-chunk API is planned. Needs the
+    `whisper` extra: `pip install "fujielab-asr[whisper]"`.
 - Pretrained Japanese models distributed via the Hugging Face Hub
   (loaded with `from_pretrained`).
 
@@ -78,6 +83,7 @@ emit `F`/`D` markers for fillers and repairs.)
 | `fujie/espnet_asr_csj_cejc_pron_comp_cbs_ctc_120300_hop132` | **CTC composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
 | `fujie/espnet_asr_csj_cejc_pron_span_cbs_ctc_120300_hop132` | **CTC span (`<F> あ </F>`)** | kana | CSJ+CEJC |
 | `fujie/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132` | CTC multitask (N/F/D head) | kana | CSJ |
+| `fujie/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0` | **Whisper large-v3 + LoRA, block-causal encoder (100 ms chunks, look-ahead 0), composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
 | `fujie/espnet_asr_csj_pron_comp_cbs_ctc_120300_hop132` | CTC composite | kana | CSJ |
 | `fujie/espnet_asr_csj_pron_span_cbs_ctc_120300_hop132` | CTC span | kana | CSJ |
 | `fujie/espnet_asr_cejc_pron_aux_cbs_transducer_081616_hop132` | Transducer | kana | CEJC |
@@ -204,3 +210,27 @@ for i in range(0, len(audio), chunk):
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+## Whisper models
+
+`Speech2TextWhisper` loads the Whisper large-v3 + LoRA models. Only the adapter
+(LoRA matrices and added-token embeddings, ~70 MB) is downloaded from the Hub;
+the Whisper base weights (3 GB) are fetched by `openai-whisper` on first use.
+
+```bash
+pip install "fujielab-asr[whisper]"
+```
+
+```python
+import soundfile as sf
+from fujielab.asr.espnet_ext.espnet2.bin.asr_whisper_inference import Speech2TextWhisper
+
+s2t = Speech2TextWhisper.from_pretrained(
+    "fujie/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0", device="cuda")
+audio, fs = sf.read("utterance.wav")      # 16 kHz mono, <= 30 s
+print(s2t(audio)[0].text)                 # "ア+F ノ+F ー+F | ス+D | イ ッ パ ツ メ ..."
+```
+
+On the 17 CSJ+CEJC evaluation sets the block-causal model (look-ahead 0) reaches
+CER 11.82 % (CBS RNN-T comp: 16.25 %) with F/D F1 85.3 / 57.6; the full-context
+version reaches 9.52 %. See the model card for details.
