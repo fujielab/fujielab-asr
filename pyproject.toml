@@ -1,6 +1,6 @@
 [project]
 name = "fujielab-asr"
-version = "0.3.0"
+version = "0.4.0"
 description = "Streaming Automatic Speech Recognition (ASR) tools for Fujie Lab, built on ESPnet"
 readme = "README.md"
 requires-python = ">=3.10, <3.13"
@@ -44,6 +44,12 @@ dependencies = [
 whisper = [
     "openai-whisper>=20240930",
     "loralib>=0.1.2",
+]
+# Streaming Zipformer models run by sherpa-onnx (fujie/sherpa_onnx_asr_*); CPU real time, no torch at inference
+sherpa = [
+    "sherpa-onnx>=1.10",
+    "huggingface_hub",
+    "numpy",
 ]
 
 [project.urls]
