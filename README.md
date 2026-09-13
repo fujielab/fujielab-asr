@@ -26,6 +26,13 @@ Hugging Face Hub. It is designed for **online / chunk-by-chunk** recognition.
     **block-causal encoder** (100 ms chunks, bounded look-ahead) for streaming use.
     Utterance-level decoding today; a chunk-by-chunk API is planned. Needs the
     `whisper` extra: `pip install "fujielab-asr[whisper]"`.
+  - **Streaming Zipformer transducer via sherpa-onnx** (`Speech2TextSherpaOnnx`) —
+    an icefall-trained 66 M model exported to ONNX and run by
+    [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx): **CPU real time on one
+    thread** (RTF 0.08 fp32 / 0.05 int8 at 320 ms chunks), partial hypotheses
+    chunk by chunk, no PyTorch at inference. CER 12.24 % on the CSJ+CEJC
+    evaluation sets (CBS RNN-T: 17.02 %). Needs the `sherpa` extra:
+    `pip install "fujielab-asr[sherpa]"`.
 - Pretrained Japanese models distributed via the Hugging Face Hub
   (loaded with `from_pretrained`).
 
@@ -84,6 +91,7 @@ emit `F`/`D` markers for fillers and repairs.)
 | `fujie/espnet_asr_csj_cejc_pron_span_cbs_ctc_120300_hop132` | **CTC span (`<F> あ </F>`)** | kana | CSJ+CEJC |
 | `fujie/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132` | CTC multitask (N/F/D head) | kana | CSJ |
 | `fujie/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0` | **Whisper large-v3 + LoRA, block-causal encoder (100 ms chunks, look-ahead 0), composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
+| `fujie/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0` | **Streaming Zipformer transducer (icefall → ONNX, sherpa-onnx), 320 / 640 ms chunks, composite (`あ+F`/`チ+D`), CPU real time** | kana | CSJ+CEJC |
 | `fujie/espnet_asr_csj_pron_comp_cbs_ctc_120300_hop132` | CTC composite | kana | CSJ |
 | `fujie/espnet_asr_csj_pron_span_cbs_ctc_120300_hop132` | CTC span | kana | CSJ |
 | `fujie/espnet_asr_cejc_pron_aux_cbs_transducer_081616_hop132` | Transducer | kana | CEJC |
@@ -140,8 +148,11 @@ Runnable scripts are in the `examples/` directory:
 - `examples/run_streaming_asr_ctc.py` — streaming **CTC** ASR (composite / span markers in tokens).
 - `examples/run_streaming_asr_multitask.py` — streaming **CTC multitask** ASR
   (transcript + filler/repair labels).
+- `examples/run_streaming_asr_sherpa.py` — streaming **Zipformer via sherpa-onnx**
+  (CPU real time; partial hypotheses every 100 ms, filler/repair markers in tokens).
 - `examples/run_streaming_asr_live.py` — live (microphone) streaming ASR.
 - `examples/demo.py` — Gradio demo.
+- `examples/bench_streaming_rtf.py` — CPU real-time-factor benchmark of the streaming Transducer models.
 
 ### Streaming Transducer multitask (recognition + auxiliary information)
 
@@ -234,3 +245,61 @@ print(s2t(audio)[0].text)                 # "ア+F ノ+F ー+F | ス+D | イ ッ
 On the 17 CSJ+CEJC evaluation sets the block-causal model (look-ahead 0) reaches
 CER 11.82 % (CBS RNN-T comp: 16.25 %) with F/D F1 85.3 / 57.6; the full-context
 version reaches 9.52 %. See the model card for details.
+
+## Streaming Zipformer via sherpa-onnx (CPU real time)
+
+`Speech2TextSherpaOnnx` runs the icefall-trained streaming Zipformer transducer
+(`fujie/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0`) through
+[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx). Only the ONNX files for the
+requested chunk size / precision are downloaded (fp32 encoder 261 MB, int8 70 MB);
+`torch` and ESPnet are not imported. The output tokens are the same composite
+encoding as the CBS `comp` models (`ア+F`, `ン+D`, `|`, `<sp>`, `<mask>`), and the
+result exposes `tokens` / `aux_labels` / `base_tokens` aligned 1:1 like the
+multitask recognizers.
+
+```bash
+pip install "fujielab-asr[sherpa]"
+```
+
+```python
+import soundfile as sf
+from fujielab.asr.sherpa_onnx_ext import Speech2TextSherpaOnnx
+
+s2t = Speech2TextSherpaOnnx.from_pretrained(
+    "fujie/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0",
+    chunk_ms=320,          # 320 (default) or 640
+    int8=False,            # True: int8 encoder, ~1.8x faster
+    num_threads=1,
+)
+
+audio, fs = sf.read("utterance.wav", dtype="float32")   # 16 kHz mono
+step, n, result = int(fs * 0.1), len(audio), None        # 100 ms per call
+for i in range(0, n, step):
+    result = s2t.streaming_decode(audio[i:i + step], is_final=i + step >= n)[0]
+    # result.text is the partial hypothesis so far
+print(result.text)        # "ア+F ノ+F ー+F | ス+D | イ ッ パ ツ メ カ ラ ー"
+print(result.transcript)  # "アノースイッパツメカラー"
+print(" ".join(f"{t}[{a}]" if a != "N" else t
+               for t, a in zip(result.base_tokens, result.aux_labels)))
+```
+
+`is_final=True` appends 0.6 s of silence and flushes the last tokens (the model was
+trained with trailing silence, so this is also what suppresses spurious tokens at
+utterance ends); the next call starts a new utterance. For endpoint-driven use pass
+`enable_endpoint_detection=True` and poll `s2t.is_endpoint()` / `s2t.finish_segment()`.
+
+Results on the 17 CSJ+CEJC evaluation sets (CER counts every token, `+F`/`+D`
+markers included, `<sp>`/`<mask>` as one symbol; RTF on one CPU thread with 100 ms
+input):
+
+| Model | Chunk | Params | CER % | F F1 | D F1 | RTF |
+|---|---|---:|---:|---:|---:|---:|
+| Zipformer, greedy | 320 ms | 66 M | **12.24** | 84.7 | 54.4 | 0.084 (int8 0.046) |
+| Zipformer, modified beam search 4 | 320 ms | 66 M | 11.82 | 85.1 | 55.3 | |
+| Zipformer, greedy | 640 ms | 66 M | 12.37 | 84.8 | 55.2 | 0.051 (int8 0.029) |
+| CBS Conformer RNN-T `comp` (this package, beam 20) | 100 ms | 30 M | 17.02 | 82.0 | 45.5 | 0.275 |
+| Whisper large-v3 + LoRA, block-causal, look-ahead 0 | 100 ms | 1.55 B | 12.25 | 85.3 | 57.6 | GPU |
+
+Against the CBS RNN-T the Zipformer is 4.8 CER points better (paired bootstrap
+[−4.94, −4.64]) and 3.3× faster; against the streaming Whisper it is on par in CER
+(−0.01, not significant) at 1/23 of the parameters.
