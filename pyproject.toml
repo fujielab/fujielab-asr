@@ -1,6 +1,6 @@
 [project]
 name = "fujielab-asr"
-version = "0.4.1"
+version = "0.5.0"
 description = "Streaming Automatic Speech Recognition (ASR) tools for Fujie Lab, built on ESPnet"
 readme = "README.md"
 requires-python = ">=3.10, <3.13"
@@ -17,6 +17,7 @@ keywords = [
     "streaming",
     "transducer",
     "ctc",
+    "zipformer",
     "japanese",
     "disfluency",
     "filler",
@@ -48,6 +49,13 @@ whisper = [
 # Streaming Zipformer models run by sherpa-onnx (fujielab/sherpa_onnx_asr_*); CPU real time, no torch at inference
 sherpa = [
     "sherpa-onnx>=1.10",
+    "huggingface_hub",
+    "numpy",
+]
+# Two-layer Cascade Zipformer models run as TorchScript (fujielab/icefall_asr_*_cascade_*); CPU real time
+cascade = [
+    "torch>=2.6",  # model.pt was exported with torch 2.7.1; 2.6 gives identical output
+    "kaldi-native-fbank>=1.20",
     "huggingface_hub",
     "numpy",
 ]
