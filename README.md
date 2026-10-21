@@ -4,8 +4,25 @@ Automatic Speech Recognition (ASR) modules for Fujie Laboratory, built on top of
 [ESPnet](https://github.com/espnet/espnet).
 
 `fujielab-asr` packages streaming-ASR extensions (the `fujielab.asr.espnet_ext`
-layer) on top of stock ESPnet, together with ready-to-use pretrained models on the
-Hugging Face Hub. It is designed for **online / chunk-by-chunk** recognition.
+layer) on top of stock ESPnet, together with pretrained models on the Hugging Face
+Hub. It is designed for **online / chunk-by-chunk** recognition.
+
+## Model availability
+
+The pretrained models listed in this README are **private** on the Hugging Face
+Hub. They were public up to `fujielab-asr` 0.4.0 under `fujie/...`; they now live,
+private, under `fujielab/...`. The code in this package stays public under the
+Apache License 2.0. To use the models, please contact Shinya Fujie at
+**shinya.fujie@chibatech.ac.jp**.
+
+Once access has been arranged, the examples here work unchanged: `from_pretrained`
+downloads a model from the Hub when you are logged in (`hf auth login` or
+`HF_TOKEN`) with an account that can read it, and it also accepts a local copy (the
+packed `.zip` for the ESPnet and Whisper models, the model directory for the
+sherpa-onnx model).
+
+学習済みモデルは Hugging Face Hub 上で非公開（private）にしました。モデルの利用を
+希望される方は、藤江（shinya.fujie@chibatech.ac.jp）までご連絡ください。
 
 ## Features
 
@@ -33,8 +50,8 @@ Hugging Face Hub. It is designed for **online / chunk-by-chunk** recognition.
     chunk by chunk, no PyTorch at inference. CER 12.24 % on the CSJ+CEJC
     evaluation sets (CBS RNN-T: 17.02 %). Needs the `sherpa` extra:
     `pip install "fujielab-asr[sherpa]"`.
-- Pretrained Japanese models distributed via the Hugging Face Hub
-  (loaded with `from_pretrained`).
+- Pretrained Japanese models hosted on the Hugging Face Hub (loaded with
+  `from_pretrained`; private, available on request, see *Model availability*).
 
 The Transducer searches are used with `search_type="maes"`, which is what every
 example here does. The `default` / `tsd` / `alsd` branches of
@@ -79,24 +96,25 @@ pip install -e .
 ## Pretrained models
 
 Loaded by tag via `from_pretrained`. (The auxiliary-information models additionally
-emit `F`/`D` markers for fillers and repairs.)
+emit `F`/`D` markers for fillers and repairs.) All of these repositories are
+private; see *Model availability* above for access (shinya.fujie@chibatech.ac.jp).
 
 | Tag | Type | Tokens | Corpus |
 |-----|------|--------|--------|
-| `fujie/espnet_asr_csj_cejc_pron_aux_cbs_transducer_120300_hop132` | **Transducer multitask (N/F/D head)** | kana | CSJ+CEJC |
-| `fujie/espnet_asr_csj_cejc_pron_comp_cbs_transducer_120300_hop132` | **Transducer composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
-| `fujie/espnet_asr_csj_cejc_pron_span_cbs_transducer_120300_hop132` | **Transducer span (`<F> あ </F>`)** | kana | CSJ+CEJC |
-| `fujie/espnet_asr_csj_cejc_pron_aux_cbs_ctc_120300_hop132` | **CTC multitask (N/F/D head)** | kana | CSJ+CEJC |
-| `fujie/espnet_asr_csj_cejc_pron_comp_cbs_ctc_120300_hop132` | **CTC composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
-| `fujie/espnet_asr_csj_cejc_pron_span_cbs_ctc_120300_hop132` | **CTC span (`<F> あ </F>`)** | kana | CSJ+CEJC |
-| `fujie/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132` | CTC multitask (N/F/D head) | kana | CSJ |
-| `fujie/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0` | **Whisper large-v3 + LoRA, block-causal encoder (100 ms chunks, look-ahead 0), composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
-| `fujie/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0` | **Streaming Zipformer transducer (icefall → ONNX, sherpa-onnx), 320 / 640 ms chunks, composite (`あ+F`/`チ+D`), CPU real time** | kana | CSJ+CEJC |
-| `fujie/espnet_asr_csj_pron_comp_cbs_ctc_120300_hop132` | CTC composite | kana | CSJ |
-| `fujie/espnet_asr_csj_pron_span_cbs_ctc_120300_hop132` | CTC span | kana | CSJ |
-| `fujie/espnet_asr_cejc_pron_aux_cbs_transducer_081616_hop132` | Transducer | kana | CEJC |
-| `fujie/espnet_asr_csj_writ_aux_cbs_transducer_081616_hop132` | Transducer | kanji | CSJ |
-| `fujie/espnet_asr_cbs_transducer_120303_hop132_cc0105` | Transducer | kana | CEJC+CSJ |
+| `fujielab/espnet_asr_csj_cejc_pron_aux_cbs_transducer_120300_hop132` | **Transducer multitask (N/F/D head)** | kana | CSJ+CEJC |
+| `fujielab/espnet_asr_csj_cejc_pron_comp_cbs_transducer_120300_hop132` | **Transducer composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
+| `fujielab/espnet_asr_csj_cejc_pron_span_cbs_transducer_120300_hop132` | **Transducer span (`<F> あ </F>`)** | kana | CSJ+CEJC |
+| `fujielab/espnet_asr_csj_cejc_pron_aux_cbs_ctc_120300_hop132` | **CTC multitask (N/F/D head)** | kana | CSJ+CEJC |
+| `fujielab/espnet_asr_csj_cejc_pron_comp_cbs_ctc_120300_hop132` | **CTC composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
+| `fujielab/espnet_asr_csj_cejc_pron_span_cbs_ctc_120300_hop132` | **CTC span (`<F> あ </F>`)** | kana | CSJ+CEJC |
+| `fujielab/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132` | CTC multitask (N/F/D head) | kana | CSJ |
+| `fujielab/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0` | **Whisper large-v3 + LoRA, block-causal encoder (100 ms chunks, look-ahead 0), composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
+| `fujielab/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0` | **Streaming Zipformer transducer (icefall → ONNX, sherpa-onnx), 320 / 640 ms chunks, composite (`あ+F`/`チ+D`), CPU real time** | kana | CSJ+CEJC |
+| `fujielab/espnet_asr_csj_pron_comp_cbs_ctc_120300_hop132` | CTC composite | kana | CSJ |
+| `fujielab/espnet_asr_csj_pron_span_cbs_ctc_120300_hop132` | CTC span | kana | CSJ |
+| `fujielab/espnet_asr_cejc_pron_aux_cbs_transducer_081616_hop132` | Transducer | kana | CEJC |
+| `fujielab/espnet_asr_csj_writ_aux_cbs_transducer_081616_hop132` | Transducer | kanji | CSJ |
+| `fujielab/espnet_asr_cbs_transducer_120303_hop132_cc0105` | Transducer | kana | CEJC+CSJ |
 
 ### The six CSJ+CEJC models
 
@@ -163,7 +181,7 @@ from fujielab.asr.espnet_ext.espnet2.bin.asr_multitask_transducer_inference_cbs 
 )
 
 s2t = Speech2TextMultitaskTransducer.from_pretrained(
-    "fujie/espnet_asr_csj_cejc_pron_aux_cbs_transducer_120300_hop132",
+    "fujielab/espnet_asr_csj_cejc_pron_aux_cbs_transducer_120300_hop132",
     beam_size=20, beam_search_config=dict(search_type="maes"),
 )
 
@@ -202,7 +220,7 @@ from fujielab.asr.espnet_ext.espnet2.bin.asr_multitask_ctc_inference_cbs import 
 )
 
 s2t = Speech2TextMultitaskCTC.from_pretrained(
-    "fujie/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132", streaming=True
+    "fujielab/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132", streaming=True
 )
 
 audio, fs = sf.read("utterance.wav")  # 16 kHz mono
@@ -237,7 +255,7 @@ import soundfile as sf
 from fujielab.asr.espnet_ext.espnet2.bin.asr_whisper_inference import Speech2TextWhisper
 
 s2t = Speech2TextWhisper.from_pretrained(
-    "fujie/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0", device="cuda")
+    "fujielab/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0", device="cuda")
 audio, fs = sf.read("utterance.wav")      # 16 kHz mono, <= 30 s
 print(s2t(audio)[0].text)                 # "ア+F ノ+F ー+F | ス+D | イ ッ パ ツ メ ..."
 ```
@@ -249,7 +267,7 @@ version reaches 9.52 %. See the model card for details.
 ## Streaming Zipformer via sherpa-onnx (CPU real time)
 
 `Speech2TextSherpaOnnx` runs the icefall-trained streaming Zipformer transducer
-(`fujie/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0`) through
+(`fujielab/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0`) through
 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx). Only the ONNX files for the
 requested chunk size / precision are downloaded (fp32 encoder 261 MB, int8 70 MB);
 `torch` and ESPnet are not imported. The output tokens are the same composite
@@ -266,7 +284,7 @@ import soundfile as sf
 from fujielab.asr.sherpa_onnx_ext import Speech2TextSherpaOnnx
 
 s2t = Speech2TextSherpaOnnx.from_pretrained(
-    "fujie/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0",
+    "fujielab/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0",
     chunk_ms=320,          # 320 (default) or 640
     int8=False,            # True: int8 encoder, ~1.8x faster
     num_threads=1,

@@ -13,7 +13,7 @@ import soundfile as sf
 
 from fujielab.asr.espnet_ext.espnet2.bin.asr_whisper_inference import Speech2TextWhisper
 
-TAG = "fujie/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0"
+TAG = "fujielab/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0"
 
 
 def main():

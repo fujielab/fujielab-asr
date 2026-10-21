@@ -18,7 +18,7 @@ from fujielab.asr.espnet_ext.espnet2.bin.asr_multitask_transducer_inference_cbs 
 
 # Japanese kana ASR + auxiliary-information head (N/F/D), CSJ + CEJC,
 # CSJ-aligned filler criterion, 50 epochs.
-model_name = "fujie/espnet_asr_csj_cejc_pron_aux_cbs_transducer_120300_hop132"
+model_name = "fujielab/espnet_asr_csj_cejc_pron_aux_cbs_transducer_120300_hop132"
 
 s2t = Speech2TextMultitaskTransducer.from_pretrained(
     model_name,

@@ -11,8 +11,8 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 1
 
 # モデル名は適宜変更
-# model_name = "fujie/espnet_asr_cbs_transducer_120303_hop132_cc0105"
-model_name = "fujie/espnet_asr_csj_writ_aux_cbs_transducer_081616_hop132"
+# model_name = "fujielab/espnet_asr_cbs_transducer_120303_hop132_cc0105"
+model_name = "fujielab/espnet_asr_csj_writ_aux_cbs_transducer_081616_hop132"
 
 s2t = Speech2Text.from_pretrained(
     model_name,

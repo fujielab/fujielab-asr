@@ -17,7 +17,7 @@ from fujielab.asr.sherpa_onnx_ext import Speech2TextSherpaOnnx
 
 ap = argparse.ArgumentParser()
 ap.add_argument("audio", nargs="?", default="aps-smp.mp3")
-ap.add_argument("--model", default="fujie/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0")
+ap.add_argument("--model", default="fujielab/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0")
 ap.add_argument("--chunk_ms", type=int, default=320, help="encoder chunk of the exported model: 320 or 640")
 ap.add_argument("--int8", action="store_true")
 ap.add_argument("--threads", type=int, default=1)
