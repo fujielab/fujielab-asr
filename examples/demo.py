@@ -8,12 +8,12 @@ def main():
     import os
 
     model_names = {
-        "Japanese/Kana/CombinedToken(CEJC)": "fujie/espnet_asr_cbs_transducer_120303_hop132_cc0105",
-        "Japanese/Kanji/CombinedToken(CSJ)": "fujie/espnet_asr_csj_writ_aux_cbs_transducer_081616_hop132",
-        "Japanese/Kana/CombinedToken(CSJ)": "fujie/espnet_asr_cejc_pron_aux_cbs_transducer_081616_hop132",
+        "Japanese/Kana/CombinedToken(CEJC)": "fujielab/espnet_asr_cbs_transducer_120303_hop132_cc0105",
+        "Japanese/Kanji/CombinedToken(CSJ)": "fujielab/espnet_asr_csj_writ_aux_cbs_transducer_081616_hop132",
+        "Japanese/Kana/CombinedToken(CSJ)": "fujielab/espnet_asr_cejc_pron_aux_cbs_transducer_081616_hop132",
     }
 
-    model_name = "fujie/espnet_asr_csj_writ_aux_cbs_transducer_081616_hop132"
+    model_name = "fujielab/espnet_asr_csj_writ_aux_cbs_transducer_081616_hop132"
 
     # Function to initialize the recognizer
     def create_speech2text(model_name):

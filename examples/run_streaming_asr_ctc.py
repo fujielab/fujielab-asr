@@ -17,9 +17,9 @@ from fujielab.asr.espnet_ext.espnet2.bin.asr_ctc_inference_cbs import Speech2Tex
 
 # Composite-token model (markers are token suffixes "+F"/"+D"). CSJ kana, CBS
 # Transformer encoder (left context 12 / main block 3 / look-ahead 0).
-model_name = "fujie/espnet_asr_csj_pron_comp_cbs_ctc_120300_hop132"
+model_name = "fujielab/espnet_asr_csj_pron_comp_cbs_ctc_120300_hop132"
 # Span-token model alternative:
-# model_name = "fujie/espnet_asr_csj_pron_span_cbs_ctc_120300_hop132"
+# model_name = "fujielab/espnet_asr_csj_pron_span_cbs_ctc_120300_hop132"
 
 s2t = Speech2TextCTC.from_pretrained(model_name, streaming=True)
 

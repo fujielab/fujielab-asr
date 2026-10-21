@@ -20,7 +20,7 @@ from fujielab.asr.espnet_ext.espnet2.bin.asr_multitask_ctc_inference_cbs import 
 
 # Japanese Kana + per-token auxiliary information (N/F/D) model, trained on CSJ.
 # CBS Transformer encoder (left context 12 / main block 3 / look-ahead 0).
-model_name = "fujie/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132"
+model_name = "fujielab/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132"
 
 s2t = Speech2TextMultitaskCTC.from_pretrained(model_name, streaming=True)
 

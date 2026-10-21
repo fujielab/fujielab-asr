@@ -1,6 +1,6 @@
 """Streaming Zipformer transducer (icefall) run by sherpa-onnx on the CPU.
 
-The models of this family (``fujie/sherpa_onnx_asr_csj_cejc_pron_*_zipformer_*``)
+The models of this family (``fujielab/sherpa_onnx_asr_csj_cejc_pron_*_zipformer_*``)
 are streaming Zipformer transducers trained with icefall on CSJ + CEJC and
 exported to ONNX. They emit the same mora + marker tokens as the ESPnet models of
 this package (``|`` word boundary, ``<sp>`` pause, composite ``ア+F`` filler and
@@ -62,7 +62,7 @@ class Speech2TextSherpaOnnx:
     Usage::
 
         s2t = Speech2TextSherpaOnnx.from_pretrained(
-            "fujie/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0")
+            "fujielab/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0")
         for chunk in chunks_of_100ms:                # float32 / float64 in [-1, 1] or int16
             result = s2t.streaming_decode(chunk, is_final=is_last)[0]
         print(result.text)                           # "ア+F ノ+F | イ ッ パ ツ メ ..."
@@ -149,7 +149,7 @@ class Speech2TextSherpaOnnx:
     @classmethod
     def from_pretrained(
         cls,
-        model_tag: str = "fujie/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0",
+        model_tag: str = "fujielab/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0",
         chunk_ms: int = 320,
         int8: bool = False,
         cache_dir: Optional[str] = None,
