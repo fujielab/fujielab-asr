@@ -30,7 +30,8 @@ import torch
 from fujielab.asr.icefall_ext import P2Kana, Speech2TextCascade
 from fujielab.asr.icefall_ext.cascade_zipformer import FRAME_S, SR
 
-MODEL = "fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0"  # Cascade+Event-DP
+MODEL = "fujielab/icefall_asr_csj_cejc_reazon_medium_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0"  # Cascade+Event-DP + ReazonSpeech
+MODEL_X10A = "fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0"  # CSJ+CEJC only
 MODEL_X6 = "fujielab/icefall_asr_csj_cejc_phn_writ_comp_cascade_zipformer_stream_c160_c640_la0"  # no events
 
 
@@ -239,7 +240,8 @@ def bench(s2t: Speech2TextCascade, sec=20.0):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model", default=MODEL,
-                    help=f"Hugging Face tag or local model directory (default: Cascade+Event-DP; without events: {MODEL_X6})")
+                    help=f"Hugging Face tag or local model directory (default: Cascade+Event-DP trained with "
+                         f"ReazonSpeech; CSJ+CEJC only: {MODEL_X10A}; without events: {MODEL_X6})")
     ap.add_argument("--device", default=None, help="input device number or part of its name")
     ap.add_argument("--list-devices", action="store_true")
     ap.add_argument("--wav", nargs="*", default=None, help="audio file(s) to stream instead of the microphone")
