@@ -1,7 +1,9 @@
 """Two-layer, two-rate streaming Zipformer transducer ("Cascade", icefall) run as TorchScript on the CPU.
 
-The models of this family (``fujielab/icefall_asr_csj_cejc_phn_writ_comp_*cascade_zipformer_stream_c160_c640_la0``)
-were trained with icefall on CSJ + CEJC and exported as one TorchScript module.
+The models of this family (``fujielab/icefall_asr_csj_cejc_*cascade_zipformer_stream_c160_c640_la0``)
+were trained with icefall on CSJ + CEJC (``..._reazon_medium_...``: plus ReazonSpeech
+medium with pseudo labels) and exported as one TorchScript module, all with the
+same streaming settings.
 One audio stream gives two outputs:
 
 - **layer 1**: phoneme symbols (IPA-based P notation: ``ː`` long vowel, ``N``
