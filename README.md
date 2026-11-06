@@ -71,10 +71,18 @@ currently run.
 ### Requirements
 
 - **Python 3.10 – 3.12** (tested on 3.11).
-- **ESPnet >= 202412** — pulled in automatically as a dependency.
+- **ESPnet 202412 – 202511** — pulled in automatically as a dependency.
   (Older `fujielab-asr` (<= 0.1.3) targeted ESPnet 202301–202503; from 0.1.4 the
-  package follows the newer ESPnet line, which uses `typeguard` 4.x.)
-- `torch` / `torchaudio` (install a build matching your CUDA / platform).
+  package follows the newer ESPnet line, which uses `typeguard` 4.x. ESPnet 202609
+  and later no longer ship the `espnet` package this extension imports.)
+- `torch` / `torchaudio` (install a build matching your CUDA / platform). torchaudio
+  loads only with the torch it was built for, and torchaudio 2.11 does not declare
+  that properly (2.11.1 fails to load with torch 2.11 and 2.12), so the package keeps
+  both below 2.11, where every torchaudio pins its torch exactly (pip then installs
+  torch 2.10.0 + torchaudio 2.10.0). To pick a version yourself, pin both, e.g.
+  `pip install fujielab-asr "torch==2.7.1" "torchaudio==2.7.1"`. Importing the
+  ESPnet recognizers with a pair that does not load raises an `ImportError` that
+  says so.
 
 ESPnet has a few dependencies that build from source (e.g. `pyworld`); a working
 C/C++ toolchain is recommended when installing.
