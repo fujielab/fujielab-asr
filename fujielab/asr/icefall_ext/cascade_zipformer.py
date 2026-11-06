@@ -1,20 +1,22 @@
 """Two-layer, two-rate streaming Zipformer transducer ("Cascade", icefall) run as TorchScript on the CPU.
 
-The models of this family (``fujielab/icefall_asr_csj_cejc_*cascade_zipformer_stream_c160_c640_la0``)
-were trained with icefall on CSJ + CEJC (``..._reazon_medium_...``: plus ReazonSpeech
-medium with pseudo labels) and exported as one TorchScript module, all with the
-same streaming settings.
+The models of this family (``fujielab/icefall_asr_csj_cejc_*cascade_zipformer_stream_c<L1>_c<L2>_la0``)
+were trained with icefall on CSJ + CEJC (``..._reazon_medium_...`` / ``..._reazon_large_...``:
+plus ReazonSpeech with pseudo labels) and exported as one TorchScript module; the
+chunk sizes are read from each model's ``config.json`` (``c160_c640``: 160 / 640 ms;
+``c80_c160``: 80 / 160 ms with no look-ahead at all).
 One audio stream gives two outputs:
 
 - **layer 1**: phoneme symbols (IPA-based P notation: ``ː`` long vowel, ``N``
   moraic nasal, ``Q`` geminate, ``ʲ`` palatalization; ``|`` word boundary,
   ``<sp>`` pause, composite ``a+F`` filler and ``a+D`` repair phonemes and, on the
   Event-DP models, ``<laugh>`` and ``<L>`` ... ``</L>`` for laughter), confirmed
-  every 160 ms;
+  every layer-1 chunk (160 or 80 ms);
 - **layer 2**: kana-kanji characters (the written form), computed from the
-  layer-1 encoder output every 640 ms.
+  layer-1 encoder output every layer-2 chunk (640 or 160 ms).
 
-Both layers run in real time on a laptop CPU (RTF ≈ 0.12 with 4 threads).
+Both layers run in real time on a laptop CPU (RTF ≈ 0.12 with 4 threads for
+``c160_c640``, about twice that for ``c80_c160``).
 Only ``torch``, ``numpy``, ``kaldi-native-fbank`` and ``huggingface_hub`` are
 needed; ESPnet and icefall are not imported by this module.
 """
@@ -160,8 +162,8 @@ class CascadeResult:
     this package. ``kana`` is layer 1 converted to katakana.
 
     Layer 2: ``text`` is the written form; ``graphemes`` / ``grapheme_timestamps`` /
-    ``grapheme_confidences`` are its symbols. Layer 2 runs on 640 ms chunks, so it
-    lags layer 1 by 0.3-0.6 s.
+    ``grapheme_confidences`` are its symbols. Layer 2 runs on longer chunks, so it
+    lags layer 1 (by 0.3-0.6 s with 640 ms chunks, about 0.15 s with 160 ms).
 
     Timestamps are seconds from the start of the utterance (start of the 40 ms
     frame the symbol was emitted at); confidences are the joiner posteriors.
@@ -232,8 +234,8 @@ class Speech2TextCascade:
         with open(os.path.join(model_dir, "p2kana.json"), encoding="utf-8") as f:
             self.p2k = P2Kana(json.load(f))
         self.T = cfg["chunk_size"] * 2 + cfg["pad_length"]  # fbank frames per encoder call (look-ahead included)
-        self.shift = cfg["chunk_size"] * 2  # fbank frames the encoder advances per call (160 ms)
-        self.chunk2 = cfg["chunk_size2"]  # layer-2 chunk in layer-1 output frames (640 ms)
+        self.shift = cfg["chunk_size"] * 2  # fbank frames the encoder advances per call (the layer-1 chunk)
+        self.chunk2 = cfg["chunk_size2"]  # layer-2 chunk in layer-1 output frames
         self.compute = 0.0
         self.parts = {"layer-1 encoder": 0.0, "layer-1 search": 0.0, "layer-2 encoder": 0.0, "layer-2 search": 0.0}
         self.reset()
