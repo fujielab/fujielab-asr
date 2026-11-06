@@ -1,6 +1,6 @@
 [project]
 name = "fujielab-asr"
-version = "0.5.2"
+version = "0.5.3"
 description = "Streaming Automatic Speech Recognition (ASR) tools for Fujie Lab, built on ESPnet"
 readme = "README.md"
 requires-python = ">=3.10, <3.13"
@@ -35,9 +35,15 @@ classifiers = [
     "Natural Language :: Japanese",
 ]
 dependencies = [
-    "espnet>=202412",
+    "espnet>=202412,<202609",  # 202609 dropped the espnet (v1) package that espnet_ext imports
     "espnet_model_zoo",
-    "torchaudio",
+    # torchaudio's compiled extension loads only with the torch it was built for. Up to 2.10
+    # each torchaudio pins that torch exactly; 2.11.0 declares no torch, and 2.11.1 declares
+    # torch>=2.11 but needs symbols that torch 2.11 / 2.12 lack (torch 2.13+ needs
+    # setuptools>=77, which ESPnet <= 202511 excludes). Stay below 2.11 so that pip picks an
+    # exactly pinned pair.
+    "torch<2.11",
+    "torchaudio<2.11",
 ]
 
 [project.optional-dependencies]
