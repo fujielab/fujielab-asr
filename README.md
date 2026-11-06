@@ -52,12 +52,12 @@ sherpa-onnx and Cascade models).
     `pip install "fujielab-asr[sherpa]"`.
   - **Two-layer, two-rate streaming Zipformer ("Cascade")** (`Speech2TextCascade`)
     — one audio stream gives a **phoneme** sequence with filler / repair /
-    laughter events every 160 ms (layer 1) and the **written form** (kana-kanji)
-    every 640 ms (layer 2). icefall-trained, run as TorchScript on the CPU in real
-    time; layer-1 P-TER 7.81 % at 279 ms word latency, layer-2 CER 11.55 % at
-    583 ms on the CSJ+CEJC evaluation sets, with the model that adds
-    ReazonSpeech (TV) pseudo labels to its training data. Needs the `cascade`
-    extra: `pip install "fujielab-asr[cascade]"`.
+    laughter events every 80 ms (layer 1) and the **written form** (kana-kanji)
+    every 160 ms (layer 2), with no look-ahead. icefall-trained, run as
+    TorchScript on the CPU in real time; layer-1 P-TER 7.80 % at 209 ms word
+    latency, layer-2 CER 11.53 % at 345 ms on the CSJ+CEJC evaluation sets, with
+    the low-latency model that adds ReazonSpeech (TV) pseudo labels to its
+    training data. Needs the `cascade` extra: `pip install "fujielab-asr[cascade]"`.
 - Pretrained Japanese models hosted on the Hugging Face Hub (loaded with
   `from_pretrained`; private, available on request, see *Model availability*).
 
@@ -118,8 +118,9 @@ private; see *Model availability* above for access (shinya.fujie@chibatech.ac.jp
 | `fujielab/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132` | CTC multitask (N/F/D head) | kana | CSJ |
 | `fujielab/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0` | **Whisper large-v3 + LoRA, block-causal encoder (100 ms chunks, look-ahead 0), composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
 | `fujielab/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0` | **Streaming Zipformer transducer (icefall → ONNX, sherpa-onnx), 320 / 640 ms chunks, composite (`あ+F`/`チ+D`), CPU real time** | kana | CSJ+CEJC |
-| `fujielab/icefall_asr_csj_cejc_reazon_medium_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0` | **Two-layer Cascade+Event-DP (icefall → TorchScript): phonemes with filler / repair / laughter events every 160 ms + written form every 640 ms, CPU real time; ReazonSpeech medium (TV, pseudo labels) added to the training data** | phoneme + kanji | CSJ+CEJC+ReazonSpeech |
-| `fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0` | Two-layer Cascade+Event-DP, the same trained on CSJ+CEJC only | phoneme + kanji | CSJ+CEJC |
+| `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0` | **Two-layer Cascade+Event-DP, low latency (icefall → TorchScript): phonemes with filler / repair / laughter events every 80 ms + written form every 160 ms, no look-ahead, CPU real time; ReazonSpeech large (TV, pseudo labels) added to the training data** | phoneme + kanji | CSJ+CEJC+ReazonSpeech |
+| `fujielab/icefall_asr_csj_cejc_reazon_medium_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0` | Two-layer Cascade+Event-DP, 160 / 640 ms chunks (130 ms look-ahead), ReazonSpeech medium added; the same accuracy on CSJ+CEJC as the row above at about half the compute | phoneme + kanji | CSJ+CEJC+ReazonSpeech |
+| `fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0` | Two-layer Cascade+Event-DP, 160 / 640 ms chunks, trained on CSJ+CEJC only | phoneme + kanji | CSJ+CEJC |
 | `…_fold1`, `…_fold2` (suffixes of the tag above) | the same as the row above, trained without the speakers of fold 1 / 2 (for processing data of speakers the recognizer has not seen) | phoneme + kanji | CSJ+CEJC |
 | `fujielab/icefall_asr_csj_cejc_phn_writ_comp_cascade_zipformer_stream_c160_c640_la0` | Two-layer Cascade, no events and no delay penalty (earlier version) | phoneme + kanji | CSJ+CEJC |
 | `fujielab/espnet_asr_csj_pron_comp_cbs_ctc_120300_hop132` | CTC composite | kana | CSJ |
@@ -181,8 +182,9 @@ Runnable scripts are in the `examples/` directory:
 - `examples/run_streaming_asr_sherpa.py` — streaming **Zipformer via sherpa-onnx**
   (CPU real time; partial hypotheses every 100 ms, filler/repair markers in tokens).
 - `examples/run_cascade_live.py` — live (microphone or file) demo of the
-  two-layer **Cascade** models: phonemes as katakana every 160 ms next to the
-  written form every 640 ms, fillers / repairs / laughter in colour, on the CPU.
+  two-layer **Cascade** models: phonemes as katakana every 80 ms next to the
+  written form every 160 ms (160 / 640 ms with the other models), fillers /
+  repairs / laughter in colour, on the CPU.
 - `examples/run_streaming_asr_live.py` — live (microphone) streaming ASR.
 - `examples/demo.py` — Gradio demo.
 - `examples/bench_streaming_rtf.py` — CPU real-time-factor benchmark of the streaming Transducer models.
@@ -341,18 +343,20 @@ Against the CBS RNN-T the Zipformer is 4.8 CER points better (paired bootstrap
 
 `Speech2TextCascade` runs the two-layer, two-rate recognizers of the
 pron-based-asr project, trained with [icefall](https://github.com/k2-fsa/icefall)
-on CSJ + CEJC (the recommended model also on ReazonSpeech medium with pseudo
-labels) and exported as one TorchScript module (84.5 M parameters, 345 MB).
+on CSJ + CEJC (the recommended models also on ReazonSpeech with pseudo labels)
+and exported as one TorchScript module (84.5 M parameters, 345 MB).
 From a single audio stream,
 
-- **layer 1** (causal Zipformer transducer on fbank, 160 ms chunks) emits
+- **layer 1** (causal Zipformer transducer on fbank; 80 ms chunks on the
+  low-latency model, 160 ms on the others) emits
   **phonemes** in an IPA-based notation (`ː` long vowel, `N` moraic nasal, `Q`
   geminate, `ʲ` palatalization, `|` word boundary, `<sp>` pause) with events:
   `a+F` phoneme in a filler, `a+D` in a repair / word fragment and, on the
   Event-DP model, `<laugh>` and `<L>` … `</L>` (speech while laughing). It is fast
   enough to drive turn-taking and backchannel decisions in spoken dialogue;
-- **layer 2** (a smaller causal Zipformer on the layer-1 encoder output, 640 ms
-  chunks) emits the **written form** (kana-kanji), 0.3–0.6 s after layer 1.
+- **layer 2** (a smaller causal Zipformer on the layer-1 encoder output; 160 ms
+  chunks on the low-latency model, 640 ms on the others) emits the **written
+  form** (kana-kanji), about 0.15 s after layer 1 (0.3–0.6 s with 640 ms chunks).
 
 Only `torch`, `kaldi-native-fbank`, `numpy` and `huggingface_hub` are needed;
 ESPnet and icefall are not imported.
@@ -366,7 +370,7 @@ import soundfile as sf
 from fujielab.asr.icefall_ext import Speech2TextCascade
 
 s2t = Speech2TextCascade.from_pretrained(
-    "fujielab/icefall_asr_csj_cejc_reazon_medium_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0",
+    "fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0",
     num_threads=4,
 )
 
@@ -388,10 +392,12 @@ the layer-1 symbols aligned 1:1 (as in the other recognizers of this package);
 `(frame, symbol, confidence)` with 40 ms frames; call `s2t.reset()` before the next
 utterance. Loading turns off TorchScript's profiling executor for the process
 (otherwise the first decoder call fails); eager-mode ESPnet models are unaffected.
-All Cascade models have the same streaming settings and interface (the earlier
-model without events only lacks the laughter symbols), so they are
-interchangeable; `from_pretrained()` without a tag loads the CSJ+CEJC-only
-Cascade+Event-DP model (`fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`).
+All Cascade models have the same interface and output symbols (the earlier
+model without events only lacks the laughter symbols), and the chunk sizes are
+read from each model's `config.json`, so they are interchangeable. The
+low-latency model needs about twice the compute of the 160 / 640 ms models.
+`from_pretrained()` without a tag loads the CSJ+CEJC-only Cascade+Event-DP
+model (`fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`).
 
 **Live demo.** `examples/run_cascade_live.py` shows layer 1 (as katakana) and
 layer 2 side by side while you speak, on a laptop CPU:
@@ -403,27 +409,35 @@ python examples/run_cascade_live.py --wav examples/aps-smp.mp3   # a file, in re
 python examples/run_cascade_live.py --bench                 # real-time factor, per layer
 ```
 
-The demo loads the ReazonSpeech model by default; `--model` takes any other tag
-(e.g. `--model fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`) or a local model directory.
+The demo loads the low-latency model by default. If the status line says
+processing is falling behind, `--model fujielab/icefall_asr_csj_cejc_reazon_medium_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`
+gives the same accuracy at about half the compute; `--model` takes any other tag
+or a local model directory.
 
 Results on the 17 CSJ + CEJC evaluation sets (23,259 utterances; greedy search).
 P-TER counts every layer-1 symbol; CER is on the written form. Word latency
 (median) is the time at which a word's last symbol can be emitted in real
 streaming minus the word end in the CSJ time annotation (8 CSJ core lectures):
 
-| Model | Layer-1 P-TER % | Layer-1 latency | Layer-2 CER % | Layer-2 latency | Laughter F1 | Filler F1 | Repair F1 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Cascade+Event-DP + ReazonSpeech (`…_reazon_medium_…_ev_cascade_…`) | **7.81** | 279 ms | **11.55** | 583 ms | **81.6** | **74.4** | **49.5** |
-| Cascade+Event-DP, CSJ+CEJC only (`…_csj_cejc_phn_…_ev_cascade_…`) | 8.05 | **275 ms** | 12.30 | **562 ms** | 80.5 | 72.5 | 46.3 |
-| Cascade (`…_cascade_…`) | 7.97 | 356 ms | 12.31 | 589 ms | — | — | — |
-| Single-layer grapheme Zipformer, 160 ms chunks | — | — | 13.53 | | — | — | — |
+| Model | Chunks (L1 / L2) | Layer-1 P-TER % | Layer-1 latency | Layer-2 CER % | Layer-2 latency | Laughter F1 | Filler F1 | Repair F1 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Low-latency Cascade+Event-DP + ReazonSpeech (`…_reazon_large_…_c80_c160_la0`) | 80 / 160 ms | **7.80** | **209 ms** | **11.53** | **345 ms** | 80.8 | 74.1 | 48.7 |
+| Cascade+Event-DP + ReazonSpeech (`…_reazon_medium_…_c160_c640_la0`) | 160 / 640 ms | 7.81 | 279 ms | 11.55 | 583 ms | **81.6** | **74.4** | **49.5** |
+| Cascade+Event-DP, CSJ+CEJC only (`…_csj_cejc_phn_…_ev_cascade_…`) | 160 / 640 ms | 8.05 | 275 ms | 12.30 | 562 ms | 80.5 | 72.5 | 46.3 |
+| Cascade (`…_cascade_…`) | 160 / 640 ms | 7.97 | 356 ms | 12.31 | 589 ms | — | — | — |
+| Single-layer grapheme Zipformer | 160 ms | — | — | 13.53 | | — | — | — |
 
-Adding ReazonSpeech lowers the layer-2 CER by 0.74 points on CSJ+CEJC (paired
-bootstrap [−0.88, −0.63]) and by much more outside them (layer-2 CER %):
+The 160 / 640 ms models also read 130 ms of padding beyond each chunk; the
+low-latency model reads none. It has the same accuracy as the 160 / 640 ms
+ReazonSpeech model (layer-2 CER −0.03 [−0.16, +0.10], P-TER −0.01 [−0.10, +0.07],
+paired bootstrap) with words arriving 70 ms (layer 1) and 238 ms (layer 2)
+earlier. Adding ReazonSpeech lowers the layer-2 CER by 0.74 points on CSJ+CEJC
+([−0.88, −0.63]) and by much more outside them (layer-2 CER %):
 
 | Model | JSUT basic5000 (read) | TEDxJP-10K (lectures) | LaboroTV dev (TV) | ReazonSpeech test (TV) |
 |---|---:|---:|---:|---:|
-| Cascade+Event-DP + ReazonSpeech | **10.01** | **13.31** | **15.77** | **10.34** |
+| Low-latency Cascade+Event-DP + ReazonSpeech (large) | **9.54** | 13.79 | **15.44** | **9.71** |
+| Cascade+Event-DP + ReazonSpeech (medium) | 10.01 | **13.31** | 15.77 | 10.34 |
 | Cascade+Event-DP, CSJ+CEJC only | 12.00 | 16.04 | 23.38 | 22.14 |
 
 JSUT is scored with numbers in kanji (as in CSJ / CEJC); ReazonSpeech test is
@@ -435,4 +449,5 @@ the CSJ+CEJC-only model is the alternative where that matters.
 The streaming implementation reproduces the evaluation decode (Cascade+Event-DP,
 150 utterances: P-TER 6.36 vs 6.35, CER 7.66 vs 7.74; differences are mostly the
 last 1–2 characters of an utterance) and runs at RTF 0.12 with 4 threads (0.16
-with 1) on an i9-12900K. See the model cards for training details.
+with 1) on an i9-12900K; the low-latency model at 0.22 (0.27 with 1). See the
+model cards for training details.
