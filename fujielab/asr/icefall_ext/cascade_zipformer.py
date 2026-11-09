@@ -162,8 +162,14 @@ class CascadeResult:
     this package. ``kana`` is layer 1 converted to katakana.
 
     Layer 2: ``text`` is the written form; ``graphemes`` / ``grapheme_timestamps`` /
-    ``grapheme_confidences`` are its symbols. Layer 2 runs on longer chunks, so it
-    lags layer 1 (by 0.3-0.6 s with 640 ms chunks, about 0.15 s with 160 ms).
+    ``grapheme_confidences`` are its symbols. In the streaming models layer 2 runs on
+    longer chunks, so it lags layer 1 (by 0.3-0.6 s with 640 ms chunks, about 0.15 s
+    with 160 ms). The offline models with a marked layer 2 (``…_writaux_…``) emit
+    ``え+F`` / ``こ+D`` there as well: ``base_graphemes`` / ``grapheme_aux_labels``
+    split them like layer 1, ``text`` drops the marks, and ``tagged_text`` writes
+    them as in CSJ, ``(F えー)`` / ``(D こ)``, with laughter as ``<笑>`` / ``(笑 …)``
+    (for the streaming models it is ``text`` plus any laughter). ``text`` leaves the
+    laughter symbols (``<laugh>``, ``<L>``, ``</L>``) out; ``graphemes`` keeps them.
 
     Timestamps are seconds from the start of the utterance (start of the 40 ms
     frame the symbol was emitted at); confidences are the joiner posteriors.
@@ -179,6 +185,9 @@ class CascadeResult:
     graphemes: List[str] = field(default_factory=list)
     grapheme_timestamps: List[float] = field(default_factory=list)
     grapheme_confidences: List[float] = field(default_factory=list)
+    tagged_text: str = ""
+    base_graphemes: List[str] = field(default_factory=list)
+    grapheme_aux_labels: List[str] = field(default_factory=list)
 
 
 def _split_marker(token: str):
@@ -186,6 +195,78 @@ def _split_marker(token: str):
     if m:
         return m.group("base"), m.group("mark")
     return token, "N"
+
+
+def _tagged_text(base: Sequence[str], marks: Sequence[str]) -> str:
+    """Layer-2 characters with their markers -> CSJ notation, e.g. ``四つの(F えーと)第一声<笑>``.
+
+    A run of characters with the same marker becomes one ``(F …)`` / ``(D …)``;
+    ``<laugh>`` is written ``<笑>`` and ``<L>`` … ``</L>`` (laughing speech)
+    ``(笑 …)``, and a laughter symbol closes an open filler / repair tag. This is
+    the ``render`` of the models' reference decoder (``offline_ref_decode.py``).
+    """
+    out, cur = [], ""  # cur: marker of the open (F / (D tag
+    for b, m in zip(base, marks):
+        m = m if m in ("F", "D") else ""
+        if m != cur:
+            if cur:
+                out.append(")")
+            if m:
+                out.append(f"({m} ")
+            cur = m
+        if b == "<laugh>":
+            out.append("<笑>")
+        elif b == "<L>":
+            out.append("(笑 ")
+        elif b == "</L>":
+            out.append(")")
+        elif not b.startswith("<"):  # <unk> etc. are not written
+            out.append(b)
+    if cur:
+        out.append(")")
+    return "".join(out)
+
+
+def _as_float32(speech: Union[np.ndarray, Sequence[float]]) -> np.ndarray:
+    """16 kHz audio as float32 in [-1, 1]: (T, C) is averaged to mono, integers are scaled by 1 / 32768."""
+    x = np.asarray(speech)
+    if x.ndim == 2:  # (T, C) -> mono
+        x = x.mean(axis=1)
+    if np.issubdtype(x.dtype, np.integer):
+        x = x.astype(np.float32) / 32768.0
+    return np.ascontiguousarray(x, dtype=np.float32)
+
+
+def make_cascade_result(p2k: "P2Kana", ev1, ev2) -> CascadeResult:
+    """Build a :class:`CascadeResult` from ``(frame, symbol, confidence)`` lists of both layers."""
+    ev1 = [e for e in ev1 if e[1] not in _SKIP]
+    tokens = [t for _, t, _ in ev1]
+    base, aux = [], []
+    for t in tokens:
+        b, a = _split_marker(t)
+        base.append(b)
+        aux.append(a)
+    graphemes = [t for _, t, _ in ev2]
+    gbase, gaux = [], []
+    for t in graphemes:
+        b, a = _split_marker(t)
+        gbase.append(b)
+        gaux.append(a)
+    return CascadeResult(
+        text="".join(t for t in gbase if not t.startswith("<")),
+        kana=p2k.to_text(tokens),
+        tokens=tokens,
+        aux_labels=aux,
+        base_tokens=base,
+        timestamps=[round(f * FRAME_S, 3) for f, _, _ in ev1],
+        confidences=[c for _, _, c in ev1],
+        graphemes=graphemes,
+        grapheme_timestamps=[round(f * FRAME_S, 3) for f, _, _ in ev2],
+        grapheme_confidences=[c for _, _, c in ev2],
+        tagged_text=_tagged_text(gbase, gaux),
+        base_graphemes=gbase,
+        grapheme_aux_labels=gaux,
+    )
 
 
 # ----------------------------------------------------------------------------- recognizer
@@ -227,6 +308,8 @@ class Speech2TextCascade:
         self.model_dir = model_dir
         with open(os.path.join(model_dir, "config.json"), encoding="utf-8") as f:
             self.cfg = cfg = json.load(f)
+        if cfg.get("mode") == "offline":
+            raise ValueError(f"{model_dir} holds an offline model: load it with Speech2TextCascadeOffline")
         self.m = torch.jit.load(os.path.join(model_dir, "model.pt"), map_location="cpu")
         self.m.eval()
         self.tok_p = _load_tokens(os.path.join(model_dir, "tokens_p.txt"))
@@ -281,14 +364,6 @@ class Speech2TextCascade:
         self.samples = 0
         self._ev1, self._ev2 = [], []  # symbols of the open utterance (streaming_decode)
 
-    def _as_float32(self, speech: Union[np.ndarray, Sequence[float]]) -> np.ndarray:
-        x = np.asarray(speech)
-        if x.ndim == 2:  # (T, C) -> mono
-            x = x.mean(axis=1)
-        if np.issubdtype(x.dtype, np.integer):
-            x = x.astype(np.float32) / 32768.0
-        return np.ascontiguousarray(x, dtype=np.float32)
-
     def _pull(self):
         n = self.fbank.num_frames_ready
         if n > self.fetched:
@@ -302,7 +377,7 @@ class Speech2TextCascade:
 
         Frames count 40 ms output frames from the start of the utterance.
         """
-        x = self._as_float32(speech)
+        x = _as_float32(speech)
         with torch.inference_mode():
             self.fbank.accept_waveform(SR, x)
             self.samples += len(x)
@@ -359,26 +434,7 @@ class Speech2TextCascade:
     # -------------------------------------------------------------- decoding
     def make_result(self, ev1, ev2) -> CascadeResult:
         """Build a :class:`CascadeResult` from accumulated ``(frame, symbol, confidence)`` lists."""
-        ev1 = [e for e in ev1 if e[1] not in _SKIP]
-        tokens = [t for _, t, _ in ev1]
-        base, aux = [], []
-        for t in tokens:
-            b, a = _split_marker(t)
-            base.append(b)
-            aux.append(a)
-        graphemes = [t for _, t, _ in ev2]
-        return CascadeResult(
-            text="".join(t for t in graphemes if not t.startswith("<")),
-            kana=self.p2k.to_text(tokens),
-            tokens=tokens,
-            aux_labels=aux,
-            base_tokens=base,
-            timestamps=[round(f * FRAME_S, 3) for f, _, _ in ev1],
-            confidences=[c for _, _, c in ev1],
-            graphemes=graphemes,
-            grapheme_timestamps=[round(f * FRAME_S, 3) for f, _, _ in ev2],
-            grapheme_confidences=[c for _, _, c in ev2],
-        )
+        return make_cascade_result(self.p2k, ev1, ev2)
 
     def streaming_decode(
         self, speech: Union[np.ndarray, Sequence[float]], is_final: bool = False
