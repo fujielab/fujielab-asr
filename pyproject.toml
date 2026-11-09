@@ -1,6 +1,6 @@
 [project]
 name = "fujielab-asr"
-version = "0.5.3"
+version = "0.6.0"
 description = "Streaming Automatic Speech Recognition (ASR) tools for Fujie Lab, built on ESPnet"
 readme = "README.md"
 requires-python = ">=3.10, <3.13"
@@ -58,7 +58,7 @@ sherpa = [
     "huggingface_hub",
     "numpy",
 ]
-# Two-layer Cascade Zipformer models run as TorchScript (fujielab/icefall_asr_*_cascade_*); CPU real time
+# Two-layer Cascade Zipformer models run as TorchScript (fujielab/icefall_asr_*_cascade_*): streaming (CPU real time) and offline
 cascade = [
     "torch>=2.6",  # model.pt was exported with torch 2.7.1; 2.6 gives identical output
     "kaldi-native-fbank>=1.20",

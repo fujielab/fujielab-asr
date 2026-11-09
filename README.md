@@ -58,6 +58,12 @@ sherpa-onnx and Cascade models).
     latency, layer-2 CER 11.53 % at 345 ms on the CSJ+CEJC evaluation sets, with
     the low-latency model that adds ReazonSpeech (TV) pseudo labels to its
     training data. Needs the `cascade` extra: `pip install "fujielab-asr[cascade]"`.
+  - **Two-layer offline Zipformer** (`Speech2TextCascadeOffline`) — the most
+    accurate model of the package, for transcribing recordings: both layers see
+    the whole utterance, and the **written form itself carries the filler /
+    repair marks** (`(F えー)昨日(D こ)今度の話`, CSJ notation). Layer-2 CER
+    9.37 %, filler / repair F1 84.6 / 59.7 on the written form, layer-1 P-TER
+    6.30 %; 0.03 × real time on 4 CPU threads. Same `cascade` extra.
 - Pretrained Japanese models hosted on the Hugging Face Hub (loaded with
   `from_pretrained`; private, available on request, see *Model availability*).
 
@@ -126,6 +132,7 @@ private; see *Model availability* above for access (shinya.fujie@chibatech.ac.jp
 | `fujielab/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132` | CTC multitask (N/F/D head) | kana | CSJ |
 | `fujielab/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0` | **Whisper large-v3 + LoRA, block-causal encoder (100 ms chunks, look-ahead 0), composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
 | `fujielab/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0` | **Streaming Zipformer transducer (icefall → ONNX, sherpa-onnx), 320 / 640 ms chunks, composite (`あ+F`/`チ+D`), CPU real time** | kana | CSJ+CEJC |
+| `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond` | **Two-layer offline Cascade (icefall → TorchScript, whole utterance, not streaming): phonemes with filler / repair / laughter events + written form with filler / repair marks (`(F えー)`, `(D こ)`); layer 2 also reads the layer-1 decisions; the most accurate model** | phoneme + kanji | CSJ+CEJC+ReazonSpeech |
 | `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0` | **Two-layer Cascade+Event-DP, low latency (icefall → TorchScript): phonemes with filler / repair / laughter events every 80 ms + written form every 160 ms, no look-ahead, CPU real time; ReazonSpeech large (TV, pseudo labels) added to the training data** | phoneme + kanji | CSJ+CEJC+ReazonSpeech |
 | `fujielab/icefall_asr_csj_cejc_reazon_medium_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0` | Two-layer Cascade+Event-DP, 160 / 640 ms chunks (130 ms look-ahead), ReazonSpeech medium added; the same accuracy on CSJ+CEJC as the row above at about half the compute | phoneme + kanji | CSJ+CEJC+ReazonSpeech |
 | `fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0` | Two-layer Cascade+Event-DP, 160 / 640 ms chunks, trained on CSJ+CEJC only | phoneme + kanji | CSJ+CEJC |
@@ -193,6 +200,9 @@ Runnable scripts are in the `examples/` directory:
   two-layer **Cascade** models: phonemes as katakana every 80 ms next to the
   written form every 160 ms (160 / 640 ms with the other models), fillers /
   repairs / laughter in colour, on the CPU.
+- `examples/run_cascade_offline.py` — transcribe audio files with the **offline
+  Cascade** model: cut at pauses, phonemes and the written form with
+  `(F …)` / `(D …)` per segment, optionally every symbol with its time as JSONL.
 - `examples/run_streaming_asr_live.py` — live (microphone) streaming ASR.
 - `examples/demo.py` — Gradio demo.
 - `examples/bench_streaming_rtf.py` — CPU real-time-factor benchmark of the streaming Transducer models.
@@ -459,3 +469,64 @@ The streaming implementation reproduces the evaluation decode (Cascade+Event-DP,
 last 1–2 characters of an utterance) and runs at RTF 0.12 with 4 threads (0.16
 with 1) on an i9-12900K; the low-latency model at 0.22 (0.27 with 1). See the
 model cards for training details.
+
+## Two-layer offline Zipformer: fillers and repairs in the written form
+
+`Speech2TextCascadeOffline` runs the offline model of the same project
+(`fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond`,
+84.1 M parameters, 344 MB), for transcribing recordings rather than live audio.
+Both layers see the **whole utterance**, which matters most for repairs (whether a
+word was abandoned is clear only from what follows). Compared with the streaming
+models,
+
+- **layer 2 marks fillers and repairs itself** (`え+F`, `こ+D`), so the written
+  form comes out in CSJ notation, `(F えー)昨日(D こ)今度の話`, and laughter as
+  `<笑>` / `(笑 …)`;
+- **layer 2 also reads what layer 1 decided**: the phoneme / mark symbols that the
+  layer-1 greedy search emitted at each frame are fed into the layer-2 encoder,
+  next to the layer-1 encoder output.
+
+```python
+import soundfile as sf
+from fujielab.asr.icefall_ext import Speech2TextCascadeOffline
+
+s2t = Speech2TextCascadeOffline.from_pretrained(num_threads=4)   # the model above
+audio, fs = sf.read("utterance.wav", dtype="float32")             # 16 kHz mono, one utterance
+r = s2t(audio)[0]
+print(r.tagged_text)  # "(F まあのー)こうやって(D あ)話しておりますとそれはもちろん(F あの)言語的情報を ..."
+print(r.text)         # "まあのーこうやってあ話しておりますとそれはもちろんあの言語的情報を ..."
+print(r.kana)         # "マアノー コー ヤッテ ハ ハナシテ オリマスト ..."   (layer 1)
+```
+
+The result is the same `CascadeResult` as for the streaming models, with
+`base_graphemes` / `grapheme_aux_labels` splitting the marked layer-2 characters
+like `base_tokens` / `aux_labels` do for layer 1; timestamps are seconds from the
+start of the utterance. `s2t.decode_fbank(feats)` takes precomputed 80-dim fbank
+(e.g. lhotse features) instead of audio. **Cut long recordings at pauses first**:
+the model was trained on utterances of at most 30 s (99 % within 17.7 s). The
+example does this with a simple energy-based splitter:
+
+```bash
+pip install "fujielab-asr[cascade]"
+python examples/run_cascade_offline.py examples/aps-smp.mp3              # per segment: layer 1 and layer 2
+python examples/run_cascade_offline.py a.wav --out result.jsonl          # also every symbol with its time
+```
+
+Results on the 17 CSJ + CEJC evaluation sets (greedy search). Here filler / repair
+F1 is scored on the **written form** (characters aligned by edit distance, marks
+compared), unlike the layer-1 event F1 of the streaming table above; for models
+whose layer 2 has no marks, they were moved over from layer 1 by time alignment:
+
+| Model | Layer-2 CER % | CER with marks % | Filler F1 | Repair F1 | Layer-1 P-TER % | JSUT / TEDxJP / LaboroTV (CER %) |
+|---|---:|---:|---:|---:|---:|---|
+| **Offline Cascade, marked layer 2 + layer-1 input** (this model) | 9.37 | **10.02** | **84.6** | **59.7** | **6.30** | **7.90** / **10.37** / 13.71 |
+| Offline Cascade, plain layer 2, same data and schedule (not released) | **9.33** | 10.49 | 81.8 | 54.0 | 6.36 | 8.04 / 10.42 / **13.61** |
+| Streaming low-latency Cascade (`…_c80_c160_la0`) | 11.53 | 12.91 | 79.7 | 44.1 | 7.80 | 9.54 / 13.79 / 15.44 |
+
+The marks in layer 2 cost nothing in CER (+0.04 against the plain layer 2, not
+significant) and raise the filler / repair F1 by 2.8 / 5.7 points. The
+implementation reproduces the evaluation decode: on 10 evaluation utterances its
+symbols and frame times in both layers are identical to icefall's from the same
+fbank, and from audio (kaldi-native-fbank) the symbols are identical too (checked
+with torch 2.6, 2.7, 2.10 and 2.12). It runs at RTF 0.028 with 4 threads (0.052
+with 1) on an i9-12900K. See the model card for training details.
