@@ -1,73 +1,77 @@
 # fujielab-asr
 
-Automatic Speech Recognition (ASR) modules for Fujie Laboratory, built on top of
-[ESPnet](https://github.com/espnet/espnet).
+English | [日本語](https://github.com/fujielab/fujielab-asr/blob/main/README_ja.md)
 
-`fujielab-asr` packages streaming-ASR extensions (the `fujielab.asr.espnet_ext`
-layer) on top of stock ESPnet, together with pretrained models on the Hugging Face
-Hub. It is designed for **online / chunk-by-chunk** recognition.
+Japanese speech recognition from Fujie Laboratory (Chiba Institute of Technology)
+that transcribes **fillers and repairs** along with the words.
+
+`fujielab-asr` puts several recognizer families behind one `from_pretrained`
+interface: two-layer Zipformer models that give phonemes and the written form
+(streaming or offline, icefall-trained, run as TorchScript), a streaming Zipformer
+run by sherpa-onnx, streaming Transducer / CTC models with a Contextual Block
+Streaming (CBS) encoder built on [ESPnet](https://github.com/espnet/espnet) (the
+`fujielab.asr.espnet_ext` layer), and Whisper large-v3 + LoRA. The streaming
+models take audio chunk by chunk (e.g. every 100 ms), and most models run in real
+time on the CPU.
 
 ## Model availability
 
 The pretrained models listed in this README are **private** on the Hugging Face
-Hub. They were public up to `fujielab-asr` 0.4.0 under `fujie/...`; they now live,
-private, under `fujielab/...`. The code in this package stays public under the
-Apache License 2.0. To use the models, please contact Shinya Fujie at
-**shinya.fujie@chibatech.ac.jp**.
+Hub. The code in this package is public under the Apache License 2.0. To use the
+models, please contact Shinya Fujie at **shinya.fujie@chibatech.ac.jp**. Note that
+the terms of the training corpora limit providing the models outside the
+laboratory (see *License* below).
 
-Once access has been arranged, the examples here work unchanged: `from_pretrained`
-downloads a model from the Hub when you are logged in (`hf auth login` or
-`HF_TOKEN`) with an account that can read it, and it also accepts a local copy (the
-packed `.zip` for the ESPnet and Whisper models, the model directory for the
-sherpa-onnx and Cascade models).
-
-学習済みモデルは Hugging Face Hub 上で非公開（private）にしました。モデルの利用を
-希望される方は、藤江（shinya.fujie@chibatech.ac.jp）までご連絡ください。
+The examples here assume use within the laboratory. `from_pretrained` downloads a
+model from the Hub when you are logged in (`hf auth login` or `HF_TOKEN`) with an
+account that can read it. It also accepts a local copy (the packed `.zip` for the
+ESPnet and Whisper models, the model directory for the sherpa-onnx and Cascade
+models).
 
 ## Features
 
-- **Streaming ASR** with a Contextual Block Streaming (CBS) encoder.
-- Recognizer families:
-  - **RNN-Transducer** (`Speech2Text`) — streaming beam search.
-  - **Transducer multitask** (`Speech2TextMultitaskTransducer`) — streaming
-    Transducer beam search that, in addition to the transcript, predicts a
-    per-token **auxiliary-information label** via a separate head:
-    `N` (normal), `F` (filler / フィラー), `D` (repair / 言い直し).
-  - **CTC-only multitask** (`Speech2TextMultitaskCTC`) — the same auxiliary-label
-    idea on a streaming greedy-CTC recognizer.
-  - **CTC-only** (`Speech2TextCTC`) — streaming greedy CTC for models whose
-    auxiliary markers are part of the recognized tokens (composite `あ+F` / `チ+D`,
-    or span `<F> あ の </F>`).
-  - **Whisper large-v3 + LoRA** (`Speech2TextWhisper`) — Whisper adapted with LoRA
-    to the same mora + marker output (`token_type whisper_mora`), with an optional
-    **block-causal encoder** (100 ms chunks, bounded look-ahead) for streaming use.
-    Utterance-level decoding today; a chunk-by-chunk API is planned. Needs the
-    `whisper` extra: `pip install "fujielab-asr[whisper]"`.
-  - **Streaming Zipformer transducer via sherpa-onnx** (`Speech2TextSherpaOnnx`) —
-    an icefall-trained 66 M model exported to ONNX and run by
-    [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx): **CPU real time on one
-    thread** (RTF 0.08 fp32 / 0.05 int8 at 320 ms chunks), partial hypotheses
-    chunk by chunk, no PyTorch at inference. CER 12.24 % on the CSJ+CEJC
-    evaluation sets (CBS RNN-T: 17.02 %). Needs the `sherpa` extra:
-    `pip install "fujielab-asr[sherpa]"`.
-  - **Two-layer, two-rate streaming Zipformer ("Cascade")** (`Speech2TextCascade`)
-    — one audio stream gives a **phoneme** sequence with filler / repair /
-    laughter events every 80 ms (layer 1) and the **written form** (kana-kanji)
-    every 160 ms (layer 2), with no look-ahead. icefall-trained, run as
-    TorchScript on the CPU in real time; layer-1 P-TER 7.80 % at 209 ms word
-    latency, layer-2 CER 11.53 % at 345 ms on the CSJ+CEJC evaluation sets, with
-    the low-latency model that adds ReazonSpeech (TV) pseudo labels to its
-    training data. Needs the `cascade` extra: `pip install "fujielab-asr[cascade]"`.
-  - **Two-layer offline Zipformer** (`Speech2TextCascadeOffline`) — the most
-    accurate models of the package, for transcribing recordings: both layers see
-    the whole utterance, and the **written form itself carries the filler /
-    repair marks** (`(F えー)昨日(D こ)今度の話`, CSJ notation). Layer-2 CER
-    9.37 %, filler / repair F1 84.6 / 59.7 on the written form, layer-1 P-TER
-    6.30 %; 0.03 × real time on 4 CPU threads. A larger variant (layer 1 =
-    Zipformer large, 190 M parameters) lowers the layer-2 CER to 9.05 % at
-    0.04 × real time. Same `cascade` extra.
-- Pretrained Japanese models hosted on the Hugging Face Hub (loaded with
-  `from_pretrained`; private, available on request, see *Model availability*).
+Recognizers, in the order of *Pretrained models* below:
+
+- **Two-layer, two-rate streaming Zipformer ("Cascade")** (`Speech2TextCascade`)
+  — one audio stream gives a **phoneme** sequence with filler / repair /
+  laughter events every 80 ms (layer 1) and the **written form** (kana-kanji)
+  every 160 ms (layer 2), with no look-ahead. icefall-trained, run as
+  TorchScript on the CPU in real time; layer-1 P-TER 7.80 % at 209 ms word
+  latency, layer-2 CER 11.53 % at 345 ms on the CSJ+CEJC evaluation sets, with
+  the low-latency model that adds ReazonSpeech (TV) pseudo labels to its
+  training data. Needs the `cascade` extra: `pip install "fujielab-asr[cascade]"`.
+- **Two-layer offline Zipformer** (`Speech2TextCascadeOffline`) — the most
+  accurate models of the package, for transcribing recordings: both layers see
+  the whole utterance, and the **written form itself carries the filler /
+  repair marks** (`(F えー)昨日(D こ)今度の話`, CSJ notation). Layer-2 CER
+  9.37 %, filler / repair F1 84.6 / 59.7 on the written form, layer-1 P-TER
+  6.30 %; 0.03 × real time on 4 CPU threads. A larger variant (layer 1 =
+  Zipformer large, 190 M parameters) lowers the layer-2 CER to 9.05 % at
+  0.04 × real time. Same `cascade` extra.
+- **Streaming Zipformer transducer via sherpa-onnx** (`Speech2TextSherpaOnnx`) —
+  an icefall-trained 66 M model exported to ONNX and run by
+  [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx): **CPU real time on one
+  thread** (RTF 0.08 fp32 / 0.05 int8 at 320 ms chunks), partial hypotheses
+  chunk by chunk, no PyTorch at inference. CER 12.24 % on the CSJ+CEJC
+  evaluation sets (CBS RNN-T: 17.02 %). Needs the `sherpa` extra:
+  `pip install "fujielab-asr[sherpa]"`.
+- **Transducer multitask** (`Speech2TextMultitaskTransducer`) — streaming
+  Transducer beam search on a CBS Conformer encoder (ESPnet) that, in addition
+  to the transcript, predicts a per-token **auxiliary-information label** via a
+  separate head:
+  `N` (normal), `F` (filler / フィラー), `D` (repair / 言い直し).
+- **RNN-Transducer** (`Speech2Text`) — the same streaming beam search without
+  the auxiliary head.
+- **CTC-only multitask** (`Speech2TextMultitaskCTC`) — the same auxiliary-label
+  idea on a streaming greedy-CTC recognizer.
+- **CTC-only** (`Speech2TextCTC`) — streaming greedy CTC for models whose
+  auxiliary markers are part of the recognized tokens (composite `あ+F` / `チ+D`,
+  or span `<F> あ の </F>`).
+- **Whisper large-v3 + LoRA** (`Speech2TextWhisper`) — Whisper adapted with LoRA
+  to the same mora + marker output (`token_type whisper_mora`), with an optional
+  **block-causal encoder** (100 ms chunks, bounded look-ahead) for streaming use.
+  Utterance-level decoding today; a chunk-by-chunk API is planned. Needs the
+  `whisper` extra: `pip install "fujielab-asr[whisper]"`.
 
 The Transducer searches are used with `search_type="maes"`, which is what every
 example here does. The `default` / `tsd` / `alsd` branches of
@@ -119,248 +123,57 @@ pip install -e .
 
 ## Pretrained models
 
-Loaded by tag via `from_pretrained`. (The auxiliary-information models additionally
-emit `F`/`D` markers for fillers and repairs.) All of these repositories are
-private; see *Model availability* above for access (shinya.fujie@chibatech.ac.jp).
+Loaded by tag with `from_pretrained`; all are private (see *Model availability*
+above). Listed in the order of *Example Usage* below.
 
-| Tag | Type | Tokens | Corpus |
-|-----|------|--------|--------|
-| `fujielab/espnet_asr_csj_cejc_pron_aux_cbs_transducer_120300_hop132` | **Transducer multitask (N/F/D head)** | kana | CSJ+CEJC |
-| `fujielab/espnet_asr_csj_cejc_pron_comp_cbs_transducer_120300_hop132` | **Transducer composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
-| `fujielab/espnet_asr_csj_cejc_pron_span_cbs_transducer_120300_hop132` | **Transducer span (`<F> あ </F>`)** | kana | CSJ+CEJC |
-| `fujielab/espnet_asr_csj_cejc_pron_aux_cbs_ctc_120300_hop132` | **CTC multitask (N/F/D head)** | kana | CSJ+CEJC |
-| `fujielab/espnet_asr_csj_cejc_pron_comp_cbs_ctc_120300_hop132` | **CTC composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
-| `fujielab/espnet_asr_csj_cejc_pron_span_cbs_ctc_120300_hop132` | **CTC span (`<F> あ </F>`)** | kana | CSJ+CEJC |
-| `fujielab/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132` | CTC multitask (N/F/D head) | kana | CSJ |
-| `fujielab/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0` | **Whisper large-v3 + LoRA, block-causal encoder (100 ms chunks, look-ahead 0), composite (`あ+F`/`チ+D`)** | kana | CSJ+CEJC |
-| `fujielab/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0` | **Streaming Zipformer transducer (icefall → ONNX, sherpa-onnx), 320 / 640 ms chunks, composite (`あ+F`/`チ+D`), CPU real time** | kana | CSJ+CEJC |
-| `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_l_offline_writaux_proncond` | Two-layer offline Cascade as in the row below, layer 1 = Zipformer large (190 M parameters, 768 MB): layer-2 CER 9.05 % vs 9.37 %, about 1.4 × the compute | phoneme + kanji | CSJ+CEJC+ReazonSpeech |
-| `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond` | **Two-layer offline Cascade (icefall → TorchScript, whole utterance, not streaming): phonemes with filler / repair / laughter events + written form with filler / repair marks (`(F えー)`, `(D こ)`); layer 2 also reads the layer-1 decisions; the default offline model** | phoneme + kanji | CSJ+CEJC+ReazonSpeech |
-| `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0` | **Two-layer Cascade+Event-DP, low latency (icefall → TorchScript): phonemes with filler / repair / laughter events every 80 ms + written form every 160 ms, no look-ahead, CPU real time; ReazonSpeech large (TV, pseudo labels) added to the training data** | phoneme + kanji | CSJ+CEJC+ReazonSpeech |
-| `fujielab/icefall_asr_csj_cejc_reazon_medium_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0` | Two-layer Cascade+Event-DP, 160 / 640 ms chunks (130 ms look-ahead), ReazonSpeech medium added; the same accuracy on CSJ+CEJC as the row above at about half the compute | phoneme + kanji | CSJ+CEJC+ReazonSpeech |
-| `fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0` | Two-layer Cascade+Event-DP, 160 / 640 ms chunks, trained on CSJ+CEJC only | phoneme + kanji | CSJ+CEJC |
-| `…_fold1`, `…_fold2` (suffixes of the tag above) | the same as the row above, trained without the speakers of fold 1 / 2 (for processing data of speakers the recognizer has not seen) | phoneme + kanji | CSJ+CEJC |
-| `fujielab/icefall_asr_csj_cejc_phn_writ_comp_cascade_zipformer_stream_c160_c640_la0` | Two-layer Cascade, no events and no delay penalty (earlier version) | phoneme + kanji | CSJ+CEJC |
-| `fujielab/espnet_asr_csj_pron_comp_cbs_ctc_120300_hop132` | CTC composite | kana | CSJ |
-| `fujielab/espnet_asr_csj_pron_span_cbs_ctc_120300_hop132` | CTC span | kana | CSJ |
-| `fujielab/espnet_asr_cejc_pron_aux_cbs_transducer_081616_hop132` | Transducer | kana | CEJC |
-| `fujielab/espnet_asr_csj_writ_aux_cbs_transducer_081616_hop132` | Transducer | kanji | CSJ |
-| `fujielab/espnet_asr_cbs_transducer_120303_hop132_cc0105` | Transducer | kana | CEJC+CSJ |
-
-### The six CSJ+CEJC models
-
-Three encodings of the filler/repair information × two heads. All six share the
-encoder, data, effective batch and schedule (50 epochs × 1400 steps), so both
-axes are controlled comparisons.
-
-CER is measured **with all auxiliary information stripped from both sides**, so
-every model is scored against one target; charging `comp`/`span` for the markup
-they must emit and `aux` for none made an earlier comparison look like a 2–3
-point gap when the real gap is well under half a point.
-
-| Encoding | RNN-T CER % | CTC CER % | RNN-T F/D F1 | CTC F/D F1 |
-|---|---:|---:|---:|---:|
-| `aux` | **16.01** | 16.90 | 81.9 / 44.4 | 81.6 / 43.1 |
-| `comp` | 16.25 | 17.64 | **82.0** / **45.5** | 80.4 / 44.3 |
-| `span` | 16.41 | **16.74** | 81.5 / 43.9 | 81.3 / 41.6 |
-
-**Head**: RNN-T beats CTC on every encoding (+0.33 to +1.39 points, each
-significant under a paired bootstrap over 23,500 utterances), but the margin
-varies fourfold by encoding, so there is no single figure for it. Pick CTC for a
-smaller, decoder-free, greedy-decoding model; pick RNN-T for the best transcript.
-
-**Encoding**: the ordering flips between heads (RNN-T `aux` < `comp` < `span`;
-CTC `span` < `aux` < `comp`), and the `comp` vs `span` gap also flips sign
-between the 14- and 50-epoch RNN-T checkpoints. Run-to-run variance exceeds
-these gaps — do not read a ranking into them.
-
-**Auxiliary labels barely depend on either choice**: `F` F1 spans 80.4–82.0 and
-`D` F1 spans 41.6–45.5 across all six. `D` recall is 34–38 % everywhere, the
-weak point of the whole set, and not something a different head or encoding
-fixes.
-
-One practical caveat: greedy CTC has nothing tying an opening span tag to its
-closing one, so the CTC `span` model returns malformed markup on **11.1 %** of
-utterances (RNN-T `span`: 2.8 %). Parse `<F>`/`<D>` as *set current label* and
-`</F>`/`</D>` as *clear it* rather than assuming balanced brackets.
-
-The older CSJ-only **CTC** trio is the same three-way encoding comparison on
-CSJ alone: content CER ≈6.7–6.8 %, filler F1 ≈93.
+1. **Two-layer streaming Zipformer ("Cascade")** — `Speech2TextCascade`: phonemes
+   with filler / repair / laughter marks + the written form, CPU real time
+   (`cascade` extra; [usage](#1-two-layer-streaming-zipformer-cascade))
+   - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0`
+     — **recommended**: low latency (80 / 160 ms chunks, no look-ahead), CSJ+CEJC+ReazonSpeech
+   - `fujielab/icefall_asr_csj_cejc_reazon_medium_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`
+     — 160 / 640 ms chunks, about half the compute, CSJ+CEJC+ReazonSpeech
+   - `fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`
+     — CSJ+CEJC only; `…_fold1` / `…_fold2`: trained without the speakers of fold 1 / 2
+   - `fujielab/icefall_asr_csj_cejc_phn_writ_comp_cascade_zipformer_stream_c160_c640_la0` — earlier version, without events
+2. **Two-layer offline Zipformer** — `Speech2TextCascadeOffline`: for recordings;
+   the written form itself carries the marks, `(F えー)`, `(D こ)`
+   (`cascade` extra; [usage](#2-two-layer-offline-zipformer))
+   - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond` — **default**
+   - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_l_offline_writaux_proncond`
+     — larger (190 M): a little more accurate, about 1.4 × the time
+3. **Streaming Zipformer via sherpa-onnx** — `Speech2TextSherpaOnnx`: kana with
+   composite markers, CPU real time on one thread, no PyTorch
+   (`sherpa` extra; [usage](#3-streaming-zipformer-via-sherpa-onnx-cpu-real-time))
+   - `fujielab/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0`
+4. **Streaming Transducer (ESPnet, CBS)** — kana, CSJ+CEJC ([usage](#4-streaming-transducer-multitask-recognition--auxiliary-information))
+   - `fujielab/espnet_asr_csj_cejc_pron_aux_cbs_transducer_120300_hop132`
+     — `Speech2TextMultitaskTransducer`: separate `N`/`F`/`D` head
+   - `fujielab/espnet_asr_csj_cejc_pron_comp_cbs_transducer_120300_hop132`
+     — `Speech2Text`: composite tokens `あ+F` / `チ+D`
+   - `fujielab/espnet_asr_csj_cejc_pron_span_cbs_transducer_120300_hop132`
+     — `Speech2Text`: span tags `<F> あ </F>`
+5. **Streaming CTC (ESPnet, CBS)** — kana ([usage](#5-streaming-ctc-multitask-recognition--auxiliary-information))
+   - `fujielab/espnet_asr_csj_cejc_pron_aux_cbs_ctc_120300_hop132` — `Speech2TextMultitaskCTC`
+   - `fujielab/espnet_asr_csj_cejc_pron_comp_cbs_ctc_120300_hop132`,
+     `fujielab/espnet_asr_csj_cejc_pron_span_cbs_ctc_120300_hop132` — `Speech2TextCTC`
+   - the same three trained on CSJ only: `fujielab/espnet_asr_csj_pron_{aux,comp,span}_cbs_ctc_120300_hop132`
+6. **Whisper large-v3 + LoRA** — `Speech2TextWhisper`: kana with composite
+   markers, block-causal encoder (100 ms chunks), GPU (`whisper` extra; [usage](#6-whisper-models))
+   - `fujielab/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0`
+7. **Older streaming Transducer models (ESPnet, CBS)** — `Speech2Text`
+   ([usage](#7-older-streaming-transducer-models))
+   - `fujielab/espnet_asr_cejc_pron_aux_cbs_transducer_081616_hop132` — CEJC, kana
+   - `fujielab/espnet_asr_csj_writ_aux_cbs_transducer_081616_hop132` — CSJ, kanji
+   - `fujielab/espnet_asr_cbs_transducer_120303_hop132_cc0105` — CEJC+CSJ, kana
 
 ## Example Usage
 
-Runnable scripts are in the `examples/` directory:
+One subsection per model family, in the order above: install, a minimal example,
+the runnable script in `examples/`, and results. `examples/aps-smp.mp3` (35 s of
+CSJ sample audio) can be used as input.
 
-- `examples/run_streaming_asr.py` — streaming Transducer ASR.
-- `examples/run_streaming_asr_multitask_transducer.py` — streaming **Transducer
-  multitask** ASR (transcript + filler/repair labels).
-- `examples/run_streaming_asr_ctc.py` — streaming **CTC** ASR (composite / span markers in tokens).
-- `examples/run_streaming_asr_multitask.py` — streaming **CTC multitask** ASR
-  (transcript + filler/repair labels).
-- `examples/run_streaming_asr_sherpa.py` — streaming **Zipformer via sherpa-onnx**
-  (CPU real time; partial hypotheses every 100 ms, filler/repair markers in tokens).
-- `examples/run_cascade_live.py` — live (microphone or file) demo of the
-  two-layer **Cascade** models: phonemes as katakana every 80 ms next to the
-  written form every 160 ms (160 / 640 ms with the other models), fillers /
-  repairs / laughter in colour, on the CPU.
-- `examples/run_cascade_offline.py` — transcribe audio files with the **offline
-  Cascade** model: cut at pauses, phonemes and the written form with
-  `(F …)` / `(D …)` per segment, optionally every symbol with its time as JSONL.
-- `examples/run_streaming_asr_live.py` — live (microphone) streaming ASR.
-- `examples/demo.py` — Gradio demo.
-- `examples/bench_streaming_rtf.py` — CPU real-time-factor benchmark of the streaming Transducer models.
-
-### Streaming Transducer multitask (recognition + auxiliary information)
-
-```python
-import numpy as np, soundfile as sf
-from fujielab.asr.espnet_ext.espnet2.bin.asr_multitask_transducer_inference_cbs import (
-    Speech2TextMultitaskTransducer,
-)
-
-s2t = Speech2TextMultitaskTransducer.from_pretrained(
-    "fujielab/espnet_asr_csj_cejc_pron_aux_cbs_transducer_120300_hop132",
-    beam_size=20, beam_search_config=dict(search_type="maes"),
-)
-
-audio, fs = sf.read("utterance.wav")   # 16 kHz mono
-chunk = int(16000 * 0.1)               # 100 ms
-n, result = len(audio), None
-for i in range(0, n, chunk):
-    c = audio[i:i + chunk]
-    is_final = i + chunk >= n          # flag the last chunk even when it is full
-    if len(c) < chunk:
-        c = np.pad(c, (0, chunk - len(c)))
-    r = s2t.streaming_decode(c, is_final=is_final)
-    if r:
-        result = r[0]
-
-# result.tokens and result.aux_labels are aligned 1:1 (aux in {N, F, D})
-print(" ".join(f"{t}[{a}]" if a != "N" else t
-               for t, a in zip(result.tokens, result.aux_labels)))
-```
-
-The auxiliary head lives on the joint network's hidden state, so a label only
-exists at a specific (frame, predictor-state) lattice node. The offline research
-recipe locates that node by re-encoding the utterance and forced-aligning the
-final hypothesis — a second pass over complete audio. This package instead reads
-the head at the node the beam search emitted the token at, which needs no second
-pass and so yields auxiliary labels on every chunk. On 297 held-out CEJC
-utterances the two protocols agree on **99.5 %** of tokens (**90.2 %** of tokens
-where either says `F` or `D`).
-
-### Streaming CTC multitask (recognition + auxiliary information)
-
-```python
-import numpy as np, soundfile as sf
-from fujielab.asr.espnet_ext.espnet2.bin.asr_multitask_ctc_inference_cbs import (
-    Speech2TextMultitaskCTC,
-)
-
-s2t = Speech2TextMultitaskCTC.from_pretrained(
-    "fujielab/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132", streaming=True
-)
-
-audio, fs = sf.read("utterance.wav")  # 16 kHz mono
-chunk = int(16000 * 0.1)              # 100 ms
-for i in range(0, len(audio), chunk):
-    c = audio[i:i + chunk]
-    is_final = len(c) < chunk
-    if is_final:
-        c = np.pad(c, (0, chunk - len(c)))
-    r = s2t.streaming_decode(c, is_final=is_final)[0]
-    # r.tokens and r.aux_labels are aligned 1:1 (aux in {N, F, D})
-    print(" ".join(f"{t}[{a}]" if a != "N" else t
-                   for t, a in zip(r.tokens, r.aux_labels)))
-```
-
-## License
-
-Apache License 2.0. See [LICENSE](LICENSE).
-
-## Whisper models
-
-`Speech2TextWhisper` loads the Whisper large-v3 + LoRA models. Only the adapter
-(LoRA matrices and added-token embeddings, ~70 MB) is downloaded from the Hub;
-the Whisper base weights (3 GB) are fetched by `openai-whisper` on first use.
-
-```bash
-pip install "fujielab-asr[whisper]"
-```
-
-```python
-import soundfile as sf
-from fujielab.asr.espnet_ext.espnet2.bin.asr_whisper_inference import Speech2TextWhisper
-
-s2t = Speech2TextWhisper.from_pretrained(
-    "fujielab/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0", device="cuda")
-audio, fs = sf.read("utterance.wav")      # 16 kHz mono, <= 30 s
-print(s2t(audio)[0].text)                 # "ア+F ノ+F ー+F | ス+D | イ ッ パ ツ メ ..."
-```
-
-On the 17 CSJ+CEJC evaluation sets the block-causal model (look-ahead 0) reaches
-CER 11.82 % (CBS RNN-T comp: 16.25 %) with F/D F1 85.3 / 57.6; the full-context
-version reaches 9.52 %. See the model card for details.
-
-## Streaming Zipformer via sherpa-onnx (CPU real time)
-
-`Speech2TextSherpaOnnx` runs the icefall-trained streaming Zipformer transducer
-(`fujielab/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0`) through
-[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx). Only the ONNX files for the
-requested chunk size / precision are downloaded (fp32 encoder 261 MB, int8 70 MB);
-`torch` and ESPnet are not imported. The output tokens are the same composite
-encoding as the CBS `comp` models (`ア+F`, `ン+D`, `|`, `<sp>`, `<mask>`), and the
-result exposes `tokens` / `aux_labels` / `base_tokens` aligned 1:1 like the
-multitask recognizers.
-
-```bash
-pip install "fujielab-asr[sherpa]"
-```
-
-```python
-import soundfile as sf
-from fujielab.asr.sherpa_onnx_ext import Speech2TextSherpaOnnx
-
-s2t = Speech2TextSherpaOnnx.from_pretrained(
-    "fujielab/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0",
-    chunk_ms=320,          # 320 (default) or 640
-    int8=False,            # True: int8 encoder, ~1.8x faster
-    num_threads=1,
-)
-
-audio, fs = sf.read("utterance.wav", dtype="float32")   # 16 kHz mono
-step, n, result = int(fs * 0.1), len(audio), None        # 100 ms per call
-for i in range(0, n, step):
-    result = s2t.streaming_decode(audio[i:i + step], is_final=i + step >= n)[0]
-    # result.text is the partial hypothesis so far
-print(result.text)        # "ア+F ノ+F ー+F | ス+D | イ ッ パ ツ メ カ ラ ー"
-print(result.transcript)  # "アノースイッパツメカラー"
-print(" ".join(f"{t}[{a}]" if a != "N" else t
-               for t, a in zip(result.base_tokens, result.aux_labels)))
-```
-
-`is_final=True` appends 0.6 s of silence and flushes the last tokens (the model was
-trained with trailing silence, so this is also what suppresses spurious tokens at
-utterance ends); the next call starts a new utterance. For endpoint-driven use pass
-`enable_endpoint_detection=True` and poll `s2t.is_endpoint()` / `s2t.finish_segment()`.
-
-Results on the 17 CSJ+CEJC evaluation sets (CER counts every token, `+F`/`+D`
-markers included, `<sp>`/`<mask>` as one symbol; RTF on one CPU thread with 100 ms
-input):
-
-| Model | Chunk | Params | CER % | F F1 | D F1 | RTF |
-|---|---|---:|---:|---:|---:|---:|
-| Zipformer, greedy | 320 ms | 66 M | **12.24** | 84.7 | 54.4 | 0.084 (int8 0.046) |
-| Zipformer, modified beam search 4 | 320 ms | 66 M | 11.82 | 85.1 | 55.3 | |
-| Zipformer, greedy | 640 ms | 66 M | 12.37 | 84.8 | 55.2 | 0.051 (int8 0.029) |
-| CBS Conformer RNN-T `comp` (this package, beam 20) | 100 ms | 30 M | 17.02 | 82.0 | 45.5 | 0.275 |
-| Whisper large-v3 + LoRA, block-causal, look-ahead 0 | 100 ms | 1.55 B | 12.25 | 85.3 | 57.6 | GPU |
-
-Against the CBS RNN-T the Zipformer is 4.8 CER points better (paired bootstrap
-[−4.94, −4.64]) and 3.3× faster; against the streaming Whisper it is on par in CER
-(−0.01, not significant) at 1/23 of the parameters.
-
-## Two-layer streaming Zipformer ("Cascade"): phonemes + written form
+### 1. Two-layer streaming Zipformer ("Cascade")
 
 `Speech2TextCascade` runs the two-layer, two-rate recognizers of the
 pron-based-asr project, trained with [icefall](https://github.com/k2-fsa/icefall)
@@ -473,7 +286,7 @@ last 1–2 characters of an utterance) and runs at RTF 0.12 with 4 threads (0.16
 with 1) on an i9-12900K; the low-latency model at 0.22 (0.27 with 1). See the
 model cards for training details.
 
-## Two-layer offline Zipformer: fillers and repairs in the written form
+### 2. Two-layer offline Zipformer
 
 `Speech2TextCascadeOffline` runs the offline model of the same project
 (`fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond`,
@@ -507,7 +320,7 @@ like `base_tokens` / `aux_labels` do for layer 1; timestamps are seconds from th
 start of the utterance. `s2t.decode_fbank(feats)` takes precomputed 80-dim fbank
 (e.g. lhotse features) instead of audio. **Cut long recordings at pauses first**:
 the model was trained on utterances of at most 30 s (99 % within 17.7 s). The
-example does this with a simple energy-based splitter:
+example script does this with a simple energy-based splitter:
 
 ```bash
 pip install "fujielab-asr[cascade]"
@@ -519,7 +332,7 @@ python examples/run_cascade_offline.py a.wav --out result.jsonl          # also 
 has the same files, interface and search; its layer 1 is a Zipformer large
 (encoder outputs 768 / 512 dims instead of 512 / 384; 190.0 M parameters, 768 MB).
 It is a little more accurate everywhere (table below) and takes about 1.4 × the
-time. Pass its tag to `from_pretrained` (or `--model` to the example):
+time. Pass its tag to `from_pretrained` (or `--model` to the script):
 
 ```python
 s2t = Speech2TextCascadeOffline.from_pretrained(
@@ -547,3 +360,228 @@ with torch 2.6, 2.7, 2.10 and 2.12; the large variant passes the same check with
 torch 2.10). It runs
 at RTF 0.028 with 4 threads (0.052 with 1) on an i9-12900K; the large variant at
 0.041 (0.079 with 1). See the model card for training details.
+
+### 3. Streaming Zipformer via sherpa-onnx (CPU real time)
+
+`Speech2TextSherpaOnnx` runs the icefall-trained streaming Zipformer transducer
+(`fujielab/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0`) through
+[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx). Only the ONNX files for the
+requested chunk size / precision are downloaded (fp32 encoder 261 MB, int8 70 MB);
+`torch` and ESPnet are not imported. The output tokens are the same composite
+encoding as the CBS `comp` models (`ア+F`, `ン+D`, `|`, `<sp>`, `<mask>`), and the
+result exposes `tokens` / `aux_labels` / `base_tokens` aligned 1:1 like the
+multitask recognizers.
+
+```bash
+pip install "fujielab-asr[sherpa]"
+```
+
+```python
+import soundfile as sf
+from fujielab.asr.sherpa_onnx_ext import Speech2TextSherpaOnnx
+
+s2t = Speech2TextSherpaOnnx.from_pretrained(
+    "fujielab/sherpa_onnx_asr_csj_cejc_pron_comp_zipformer_stream_c320_la0",
+    chunk_ms=320,          # 320 (default) or 640
+    int8=False,            # True: int8 encoder, ~1.8x faster
+    num_threads=1,
+)
+
+audio, fs = sf.read("utterance.wav", dtype="float32")   # 16 kHz mono
+step, n, result = int(fs * 0.1), len(audio), None        # 100 ms per call
+for i in range(0, n, step):
+    result = s2t.streaming_decode(audio[i:i + step], is_final=i + step >= n)[0]
+    # result.text is the partial hypothesis so far
+print(result.text)        # "ア+F ノ+F ー+F | ス+D | イ ッ パ ツ メ カ ラ ー"
+print(result.transcript)  # "アノースイッパツメカラー"
+print(" ".join(f"{t}[{a}]" if a != "N" else t
+               for t, a in zip(result.base_tokens, result.aux_labels)))
+```
+
+`is_final=True` appends 0.6 s of silence and flushes the last tokens (the model was
+trained with trailing silence, so this is also what suppresses spurious tokens at
+utterance ends); the next call starts a new utterance. For endpoint-driven use pass
+`enable_endpoint_detection=True` and poll `s2t.is_endpoint()` / `s2t.finish_segment()`.
+
+Results on the 17 CSJ+CEJC evaluation sets (CER counts every token, `+F`/`+D`
+markers included, `<sp>`/`<mask>` as one symbol; RTF on one CPU thread with 100 ms
+input):
+
+| Model | Chunk | Params | CER % | F F1 | D F1 | RTF |
+|---|---|---:|---:|---:|---:|---:|
+| Zipformer, greedy | 320 ms | 66 M | **12.24** | 84.7 | 54.4 | 0.084 (int8 0.046) |
+| Zipformer, modified beam search 4 | 320 ms | 66 M | 11.82 | 85.1 | 55.3 | |
+| Zipformer, greedy | 640 ms | 66 M | 12.37 | 84.8 | 55.2 | 0.051 (int8 0.029) |
+| CBS Conformer RNN-T `comp` (this package, beam 20) | 100 ms | 30 M | 17.02 | 82.0 | 45.5 | 0.275 |
+| Whisper large-v3 + LoRA, block-causal, look-ahead 0 | 100 ms | 1.55 B | 12.25 | 85.3 | 57.6 | GPU |
+
+Against the CBS RNN-T the Zipformer is 4.8 CER points better (paired bootstrap
+[−4.94, −4.64]) and 3.3× faster; against the streaming Whisper it is on par in CER
+(−0.01, not significant) at 1/23 of the parameters.
+
+Script: `examples/run_streaming_asr_sherpa.py` (partial hypotheses every 100 ms).
+
+### 4. Streaming Transducer multitask (recognition + auxiliary information)
+
+```python
+import numpy as np, soundfile as sf
+from fujielab.asr.espnet_ext.espnet2.bin.asr_multitask_transducer_inference_cbs import (
+    Speech2TextMultitaskTransducer,
+)
+
+s2t = Speech2TextMultitaskTransducer.from_pretrained(
+    "fujielab/espnet_asr_csj_cejc_pron_aux_cbs_transducer_120300_hop132",
+    beam_size=20, beam_search_config=dict(search_type="maes"),
+)
+
+audio, fs = sf.read("utterance.wav")   # 16 kHz mono
+chunk = int(16000 * 0.1)               # 100 ms
+n, result = len(audio), None
+for i in range(0, n, chunk):
+    c = audio[i:i + chunk]
+    is_final = i + chunk >= n          # flag the last chunk even when it is full
+    if len(c) < chunk:
+        c = np.pad(c, (0, chunk - len(c)))
+    r = s2t.streaming_decode(c, is_final=is_final)
+    if r:
+        result = r[0]
+
+# result.tokens and result.aux_labels are aligned 1:1 (aux in {N, F, D})
+print(" ".join(f"{t}[{a}]" if a != "N" else t
+               for t, a in zip(result.tokens, result.aux_labels)))
+```
+
+The auxiliary head lives on the joint network's hidden state, so a label only
+exists at a specific (frame, predictor-state) lattice node. The offline research
+recipe locates that node by re-encoding the utterance and forced-aligning the
+final hypothesis — a second pass over complete audio. This package instead reads
+the head at the node the beam search emitted the token at, which needs no second
+pass and so yields auxiliary labels on every chunk. On 297 held-out CEJC
+utterances the two protocols agree on **99.5 %** of tokens (**90.2 %** of tokens
+where either says `F` or `D`).
+
+The `comp` / `span` Transducer models put the markers into the tokens and use the
+plain `Speech2Text` (`fujielab.asr.espnet_ext.espnet2.bin.asr_transducer_inference_cbs`)
+with the same 100 ms loop (see 7 for its usage). Scripts:
+`examples/run_streaming_asr_multitask_transducer.py` (`aux`) and
+`examples/bench_streaming_rtf.py` (CPU real-time factor).
+
+### 5. Streaming CTC multitask (recognition + auxiliary information)
+
+```python
+import numpy as np, soundfile as sf
+from fujielab.asr.espnet_ext.espnet2.bin.asr_multitask_ctc_inference_cbs import (
+    Speech2TextMultitaskCTC,
+)
+
+s2t = Speech2TextMultitaskCTC.from_pretrained(
+    "fujielab/espnet_asr_csj_pron_aux_cbs_ctc_120300_hop132", streaming=True
+)
+
+audio, fs = sf.read("utterance.wav")  # 16 kHz mono
+chunk = int(16000 * 0.1)              # 100 ms
+for i in range(0, len(audio), chunk):
+    c = audio[i:i + chunk]
+    is_final = len(c) < chunk
+    if is_final:
+        c = np.pad(c, (0, chunk - len(c)))
+    r = s2t.streaming_decode(c, is_final=is_final)[0]
+    # r.tokens and r.aux_labels are aligned 1:1 (aux in {N, F, D})
+    print(" ".join(f"{t}[{a}]" if a != "N" else t
+                   for t, a in zip(r.tokens, r.aux_labels)))
+```
+
+Scripts: `examples/run_streaming_asr_multitask.py` (`aux`, `Speech2TextMultitaskCTC`)
+and `examples/run_streaming_asr_ctc.py` (`comp` / `span`, `Speech2TextCTC`).
+
+**Choosing among the ESPnet models (4 and 5).** The six CSJ+CEJC ESPnet models
+(three marker encodings × two heads) share the encoder, data and schedule. CER is measured with all markers stripped from both
+sides:
+
+| Encoding | RNN-T CER % | CTC CER % | RNN-T F/D F1 | CTC F/D F1 |
+|---|---:|---:|---:|---:|
+| `aux` | **16.01** | 16.90 | 81.9 / 44.4 | 81.6 / 43.1 |
+| `comp` | 16.25 | 17.64 | **82.0** / **45.5** | 80.4 / 44.3 |
+| `span` | 16.41 | **16.74** | 81.5 / 43.9 | 81.3 / 41.6 |
+
+- **Head**: RNN-T beats CTC on every encoding (+0.33 to +1.39 points, all
+  significant over 23,500 utterances). Pick CTC for a smaller, decoder-free model.
+- **Encoding**: the gaps are within run-to-run variance; do not read a ranking
+  into them. The filler / repair F1 hardly depends on either choice (`D` recall is
+  34–38 % everywhere).
+- Span tags may come out unbalanced (CTC 11.1 %, RNN-T 2.8 % of utterances):
+  read `<F>`/`<D>` as *set the label* and `</F>`/`</D>` as *clear it*.
+- The CSJ-only CTC trio: content CER ≈6.7–6.8 %, filler F1 ≈93.
+
+### 6. Whisper models
+
+`Speech2TextWhisper` loads the Whisper large-v3 + LoRA models. Only the adapter
+(LoRA matrices and added-token embeddings, ~70 MB) is downloaded from the Hub;
+the Whisper base weights (3 GB) are fetched by `openai-whisper` on first use.
+
+```bash
+pip install "fujielab-asr[whisper]"
+python examples/run_whisper_asr.py utterance.wav --device cuda
+```
+
+```python
+import soundfile as sf
+from fujielab.asr.espnet_ext.espnet2.bin.asr_whisper_inference import Speech2TextWhisper
+
+s2t = Speech2TextWhisper.from_pretrained(
+    "fujielab/espnet_asr_csj_cejc_pron_comp_whisper_large_v3_lora_stream_c100_la0", device="cuda")
+audio, fs = sf.read("utterance.wav")      # 16 kHz mono, <= 30 s
+print(s2t(audio)[0].text)                 # "ア+F ノ+F ー+F | ス+D | イ ッ パ ツ メ ..."
+```
+
+On the 17 CSJ+CEJC evaluation sets the block-causal model (look-ahead 0) reaches
+CER 11.82 % (CBS RNN-T comp: 16.25 %) with F/D F1 85.3 / 57.6; the full-context
+version reaches 9.52 %. See the model card for details.
+
+### 7. Older streaming Transducer models
+
+The earlier models use the plain streaming `Speech2Text`; the `comp` / `span`
+models of 4 load the same way.
+
+```python
+from fujielab.asr.espnet_ext.espnet2.bin.asr_transducer_inference_cbs import Speech2Text
+
+s2t = Speech2Text.from_pretrained(
+    "fujielab/espnet_asr_cejc_pron_aux_cbs_transducer_081616_hop132",
+    streaming=True, lm_weight=0.0, beam_size=20, beam_search_config=dict(search_type="maes"),
+)
+# feed 100 ms chunks as in 4; the tokens of each result:
+#   s2t.hypotheses_to_results(s2t.streaming_decode(chunk, is_final=is_final))[0][1]
+```
+
+Scripts: `examples/run_streaming_asr.py` (a file), `examples/run_streaming_asr_live.py`
+(microphone, with Silero VAD) and `examples/demo.py` (Gradio, utterance-level).
+
+## License
+
+**Code.** The code of this package is under the Apache License 2.0; see
+[LICENSE](LICENSE). The code license does not cover the pretrained models.
+
+**Pretrained models and their training data.** The models were trained on the
+corpora below, and their terms carry over to the models:
+
+- **CSJ** (Corpus of Spontaneous Japanese, National Institute for Japanese Language
+  and Linguistics, NINJAL) — models with `csj` in the tag, and `…_cc0105`.
+  Licensed under NINJAL's non-commercial license agreement: commercial use is
+  prohibited, and the current agreement treats AI models trained on the corpus as
+  derivatives, which may be used only internally by the licensee and not provided
+  to third parties.
+- **CEJC** (Corpus of Everyday Japanese Conversation, NINJAL) — models with `cejc`
+  in the tag, and `…_cc0105`. Also under NINJAL's non-commercial license agreement:
+  commercial use is prohibited, and derivatives (data, databases and programs) may
+  be used only internally and not provided to third parties. The corpus contains
+  personal information of its speakers, which must not be disclosed.
+- **ReazonSpeech** (Reazon Holdings) — models with `reazon` in the tag, where it
+  supplies pseudo-labelled training data. Distributed under CDLA-Sharing-1.0, with
+  use limited to the purposes of Article 30-4 of the Japanese Copyright Act.
+
+Every model includes CSJ and / or CEJC in its training data, so the CSJ / CEJC
+terms apply to all of them: the models are not for commercial use, and providing
+them to anyone outside the laboratory, even for research, may not be possible
+under these terms. When publishing results obtained with the models, please cite
+this repository and the corpora used.
