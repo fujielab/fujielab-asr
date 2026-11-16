@@ -33,6 +33,8 @@ Whisper large-v3 + LoRA。ストリーミングのモデルは音声を少しず
   160 ms ごとに（層 2）、先読みなしで出します。icefall で学習し、TorchScript として CPU で実時間で動きます。
   ReazonSpeech（テレビ放送）の疑似ラベルを学習データに加えた低遅延モデルで、CSJ+CEJC の評価セットにおいて
   層 1 の P-TER 7.80 %（単語の遅れ 209 ms）、層 2 の CER 11.53 %（345 ms）。
+  書字層に印を付けたその派生モデルは、書字形にもフィラー・言い直しの印（`(F えー)`、`(D こ)`）を付けます
+  （書字形でのフィラー・言い直しの F1 83.4 / 54.5、層 2 の CER 11.71 %）。
   `cascade` extra が必要です: `pip install "fujielab-asr[cascade]"`。
 - **2 層オフライン Zipformer** （`Speech2TextCascadeOffline`）— このパッケージでいちばん精度の高いモデルで、
   録音した音声の書き起こし向けです。両層が発話の全体を見て、 **書字形そのものにフィラー・言い直しの印が付きます**
@@ -107,8 +109,11 @@ pip install -e .
 
 1. **2 層ストリーミング Zipformer（Cascade）** — `Speech2TextCascade`: フィラー・言い直し・笑いの印付きの音素列と
    書字形。CPU で実時間（`cascade` extra。[使い方](#1-2-層ストリーミング-zipformercascade)）
+   - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0_writaux`
+     — **おすすめ** （デモの既定）: 低遅延（80 / 160 ms チャンク、先読みなし）、CSJ+CEJC+ReazonSpeech。
+     書字形にもフィラー・言い直しの印が付く
    - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0`
-     — **おすすめ** : 低遅延（80 / 160 ms チャンク、先読みなし）、CSJ+CEJC+ReazonSpeech
+     — 層 1 は上と同じで、書字形に印が付かないもの
    - `fujielab/icefall_asr_csj_cejc_reazon_medium_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`
      — 160 / 640 ms チャンク、計算量は約半分、CSJ+CEJC+ReazonSpeech
    - `fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`
@@ -173,7 +178,7 @@ import soundfile as sf
 from fujielab.asr.icefall_ext import Speech2TextCascade
 
 s2t = Speech2TextCascade.from_pretrained(
-    "fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0",
+    "fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0_writaux",
     num_threads=4,
 )
 
@@ -182,8 +187,9 @@ step, n, result = int(fs * 0.1), len(audio), None        # 100 ms per call
 for i in range(0, n, step):
     result = s2t.streaming_decode(audio[i:i + step], is_final=i + step >= n)[0]
     # result.kana / result.text are the hypotheses so far
-print(result.kana)    # "エ、パラゲンゴジョーホート ユー コトナ ンデスガ ア カンタンニ ..."  (layer 1)
-print(result.text)    # "えパラ言語情報ということなんですがあ簡単に ..."               (layer 2)
+print(result.kana)         # "エ、パラゲンゴジョーホート ユー コトナ ンデスガ ア カンタンニ ..."  (layer 1)
+print(result.tagged_text)  # "(F え)パラ言語情報ということなんですが(F あ)簡単に ..."       (layer 2)
+print(result.text)         # "えパラ言語情報ということなんですがあ簡単に ..."  (layer 2 without marks)
 print(" ".join(f"{t}[{a}]" if a != "N" else t
                for t, a in zip(result.base_tokens, result.aux_labels)))   # "e[F] <sp> p a r a ..."
 ```
@@ -193,8 +199,12 @@ print(" ".join(f"{t}[{a}]" if a != "N" else t
 `s2t.accept(chunk)` と `s2t.flush()` が各層の新しい記号だけを `(フレーム, 記号, 確信度)`（40 ms フレーム）で返します。
 次の発話の前に `s2t.reset()` を呼んでください。読み込むと、プロセス全体で TorchScript の profiling executor を
 止めます（止めないと最初の decoder の呼び出しが失敗します）。eager モードの ESPnet モデルには影響しません。
-Cascade のモデルはどれも同じ呼び方・同じ出力記号で（イベントなしの以前のモデルに笑いの記号が無いだけ）、
-チャンクの大きさは各モデルの `config.json` から読むので、入れ替えて使えます。低遅延モデルの計算量は
+Cascade のモデルはどれも同じ呼び方・同じ層 1 の記号で（イベントなしの以前のモデルに笑いの記号が無いだけ）、
+チャンクの大きさは各モデルの `config.json` から読むので、入れ替えて使えます。層 2 に印が付くのは `…_writaux` だけで
+（`え+F`、`こ+D`、笑い。`result.tagged_text` が CSJ の表記、`base_graphemes` / `grapheme_aux_labels` は層 1 と同じ分け方）、
+ほかのモデルでは `tagged_text` は `text` と同じです。`…_writaux` の層 1 は `…_c80_c160_la0` のものをそのまま固定し、
+層 2 を印付きで、層 1 の記号も入力に加えて学習し直しています（そのための層 1 の貪欲探索は書き出したモジュールの中で
+回るので、呼び出し側からは違いがありません）。低遅延モデルの計算量は
 160 / 640 ms のモデルの約 2 倍です。タグを渡さない `from_pretrained()` は、CSJ+CEJC のみの Cascade+Event-DP モデル
 （`fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`）を読み込みます。
 
@@ -208,7 +218,8 @@ python examples/run_cascade_live.py --wav examples/aps-smp.mp3   # a file, in re
 python examples/run_cascade_live.py --bench                 # real-time factor, per layer
 ```
 
-デモは既定で低遅延モデルを読み込みます。処理が追いつかないと状態表示に出たら、
+デモは既定で、書字層に印が付く低遅延モデルを読み込み、両層のフィラー（橙）・言い直し（マゼンタ）・笑い（緑）を
+色分けして表示します。処理が追いつかないと状態表示に出たら、
 `--model fujielab/icefall_asr_csj_cejc_reazon_medium_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`
 で同じ精度のまま計算量が約半分になります。`--model` にはほかのタグや手元のモデルのフォルダも渡せます。
 
@@ -219,6 +230,7 @@ CSJ + CEJC の評価セット 17 個（23,259 発話、貪欲探索）での結�
 | モデル | チャンク（層 1 / 層 2） | 層 1 P-TER % | 層 1 の遅れ | 層 2 CER % | 層 2 の遅れ | 笑い F1 | フィラー F1 | 言い直し F1 |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
 | 低遅延 Cascade+Event-DP + ReazonSpeech（`…_reazon_large_…_c80_c160_la0`） | 80 / 160 ms | **7.80** | **209 ms** | **11.53** | **345 ms** | 80.8 | 74.1 | 48.7 |
+| 同上、書字層に印付き（`…_c80_c160_la0_writaux`） | 80 / 160 ms | **7.80** | **209 ms** | 11.71 | 346 ms | 80.8 | 74.1 | 48.7 |
 | Cascade+Event-DP + ReazonSpeech（`…_reazon_medium_…_c160_c640_la0`） | 160 / 640 ms | 7.81 | 279 ms | 11.55 | 583 ms | **81.6** | **74.4** | **49.5** |
 | Cascade+Event-DP、CSJ+CEJC のみ（`…_csj_cejc_phn_…_ev_cascade_…`） | 160 / 640 ms | 8.05 | 275 ms | 12.30 | 562 ms | 80.5 | 72.5 | 46.3 |
 | Cascade（`…_cascade_…`） | 160 / 640 ms | 7.97 | 356 ms | 12.31 | 589 ms | — | — | — |
@@ -231,7 +243,8 @@ CSJ+CEJC で層 2 の CER が 0.74 ポイント下がり（[−0.88, −0.63]）
 
 | モデル | JSUT basic5000（朗読） | TEDxJP-10K（講演） | LaboroTV dev（テレビ） | ReazonSpeech test（テレビ） |
 |---|---:|---:|---:|---:|
-| 低遅延 Cascade+Event-DP + ReazonSpeech（large） | **9.54** | 13.79 | **15.44** | **9.71** |
+| 低遅延 Cascade+Event-DP + ReazonSpeech（large） | **9.54** | 13.79 | 15.44 | **9.71** |
+| 同上、書字層に印付き | 9.67 | 14.44 | **15.39** | — |
 | Cascade+Event-DP + ReazonSpeech（medium） | 10.01 | **13.31** | 15.77 | 10.34 |
 | Cascade+Event-DP、CSJ+CEJC のみ | 12.00 | 16.04 | 23.38 | 22.14 |
 
@@ -242,7 +255,7 @@ CSJ+CEJC のみのモデルを使ってください。
 
 ストリーミングの実装は評価時の認識を再現しています（Cascade+Event-DP、150 発話: P-TER 6.36 対 6.35、CER 7.66 対 7.74。
 違いはほとんどが発話の最後の 1〜2 文字です）。i9-12900K で 4 スレッドなら RTF 0.12（1 スレッドで 0.16）、
-低遅延モデルは 0.22（0.27）です。学習の詳細は各モデルカードをご覧ください。
+低遅延モデルは 0.22〜0.23（0.26〜0.27）です。学習の詳細は各モデルカードをご覧ください。
 
 ### 2. 2 層オフライン Zipformer
 
@@ -250,7 +263,7 @@ CSJ+CEJC のみのモデルを使ってください。
 （`fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond`、
 8,410 万パラメータ、344 MB）を動かします。リアルタイムの音声ではなく、録音した音声の書き起こし向けです。
 両層が **発話の全体** を見ます。これが最も効くのは言い直しです（語が言いさしになったかどうかは、その後を聞かないと
-わかりません）。ストリーミングのモデルと比べて、
+わかりません）。ストリーミングの多くのモデルと比べて（ストリーミングの `…_writaux` も次の 2 点は同じです）、
 
 - **層 2 自身がフィラー・言い直しの印を出す** （`え+F`、`こ+D`）ので、書字形が CSJ の表記
   `(F えー)昨日(D こ)今度の話` で出ます。笑いは `<笑>` / `(笑 …)` です。
@@ -301,6 +314,7 @@ CSJ + CEJC の評価セット 17 個（貪欲探索）での結果です。こ�
 | オフライン Cascade large（`…_zipformer_l_offline_writaux_proncond`）、印付きの層 2 + 層 1 の入力 | **9.05** | **9.70** | **84.6** | **59.8** | **6.13** | **7.50** / **10.32** / **13.34** |
 | オフライン Cascade、印なしの層 2、同じデータ・同じ学習（非公開） | 9.33 | 10.49 | 81.8 | 54.0 | 6.36 | 8.04 / 10.42 / 13.61 |
 | ストリーミングの低遅延 Cascade（`…_c80_c160_la0`） | 11.53 | 12.91 | 79.7 | 44.1 | 7.80 | 9.54 / 13.79 / 15.44 |
+| ストリーミングの低遅延 Cascade、層 2 に印付き（`…_c80_c160_la0_writaux`） | 11.71 | 12.40 | 83.4 | 54.5 | 7.80 | 9.67 / 14.44 / 15.39 |
 
 層 2 に印を付けても CER は悪くならず（印なしの層 2 に対して +0.04、有意差なし）、フィラー / 言い直しの F1 は
 2.8 / 5.7 ポイント上がります。実装は評価時の認識を再現しています: 評価の 10 発話で、同じ fbank からなら両層の記号と

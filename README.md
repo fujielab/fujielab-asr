@@ -39,7 +39,10 @@ Recognizers, in the order of *Pretrained models* below:
   TorchScript on the CPU in real time; layer-1 P-TER 7.80 % at 209 ms word
   latency, layer-2 CER 11.53 % at 345 ms on the CSJ+CEJC evaluation sets, with
   the low-latency model that adds ReazonSpeech (TV) pseudo labels to its
-  training data. Needs the `cascade` extra: `pip install "fujielab-asr[cascade]"`.
+  training data. Its variant with a marked writing layer also writes the
+  fillers and repairs into the written form (`(F えー)`, `(D こ)`; filler /
+  repair F1 83.4 / 54.5 there, layer-2 CER 11.71 %). Needs the `cascade` extra:
+  `pip install "fujielab-asr[cascade]"`.
 - **Two-layer offline Zipformer** (`Speech2TextCascadeOffline`) — the most
   accurate models of the package, for transcribing recordings: both layers see
   the whole utterance, and the **written form itself carries the filler /
@@ -129,8 +132,11 @@ above). Listed in the order of *Example Usage* below.
 1. **Two-layer streaming Zipformer ("Cascade")** — `Speech2TextCascade`: phonemes
    with filler / repair / laughter marks + the written form, CPU real time
    (`cascade` extra; [usage](#1-two-layer-streaming-zipformer-cascade))
+   - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0_writaux`
+     — **recommended** (demo default): low latency (80 / 160 ms chunks, no look-ahead), CSJ+CEJC+ReazonSpeech;
+     the written form also carries the filler / repair marks
    - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0`
-     — **recommended**: low latency (80 / 160 ms chunks, no look-ahead), CSJ+CEJC+ReazonSpeech
+     — the same layer 1 with an unmarked written form
    - `fujielab/icefall_asr_csj_cejc_reazon_medium_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`
      — 160 / 640 ms chunks, about half the compute, CSJ+CEJC+ReazonSpeech
    - `fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`
@@ -204,7 +210,7 @@ import soundfile as sf
 from fujielab.asr.icefall_ext import Speech2TextCascade
 
 s2t = Speech2TextCascade.from_pretrained(
-    "fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0",
+    "fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0_writaux",
     num_threads=4,
 )
 
@@ -213,8 +219,9 @@ step, n, result = int(fs * 0.1), len(audio), None        # 100 ms per call
 for i in range(0, n, step):
     result = s2t.streaming_decode(audio[i:i + step], is_final=i + step >= n)[0]
     # result.kana / result.text are the hypotheses so far
-print(result.kana)    # "エ、パラゲンゴジョーホート ユー コトナ ンデスガ ア カンタンニ ..."  (layer 1)
-print(result.text)    # "えパラ言語情報ということなんですがあ簡単に ..."               (layer 2)
+print(result.kana)         # "エ、パラゲンゴジョーホート ユー コトナ ンデスガ ア カンタンニ ..."  (layer 1)
+print(result.tagged_text)  # "(F え)パラ言語情報ということなんですが(F あ)簡単に ..."       (layer 2)
+print(result.text)         # "えパラ言語情報ということなんですがあ簡単に ..."  (layer 2 without marks)
 print(" ".join(f"{t}[{a}]" if a != "N" else t
                for t, a in zip(result.base_tokens, result.aux_labels)))   # "e[F] <sp> p a r a ..."
 ```
@@ -226,9 +233,15 @@ the layer-1 symbols aligned 1:1 (as in the other recognizers of this package);
 `(frame, symbol, confidence)` with 40 ms frames; call `s2t.reset()` before the next
 utterance. Loading turns off TorchScript's profiling executor for the process
 (otherwise the first decoder call fails); eager-mode ESPnet models are unaffected.
-All Cascade models have the same interface and output symbols (the earlier
+All Cascade models have the same interface and layer-1 symbols (the earlier
 model without events only lacks the laughter symbols), and the chunk sizes are
-read from each model's `config.json`, so they are interchangeable. The
+read from each model's `config.json`, so they are interchangeable. Only the
+`…_writaux` model marks layer 2 (`え+F`, `こ+D`, laughter; `result.tagged_text` in
+CSJ notation, `base_graphemes` / `grapheme_aux_labels` split as in layer 1); with
+the others `tagged_text` equals `text`. Its layer 1 is the `…_c80_c160_la0` one,
+frozen while its layer 2 was retrained with the marks and with the layer-1
+symbols as extra input (the layer-1 greedy search for that runs inside the
+exported module, so the caller sees no difference). The
 low-latency model needs about twice the compute of the 160 / 640 ms models.
 `from_pretrained()` without a tag loads the CSJ+CEJC-only Cascade+Event-DP
 model (`fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`).
@@ -243,7 +256,9 @@ python examples/run_cascade_live.py --wav examples/aps-smp.mp3   # a file, in re
 python examples/run_cascade_live.py --bench                 # real-time factor, per layer
 ```
 
-The demo loads the low-latency model by default. If the status line says
+The demo loads the low-latency model with the marked writing layer by default
+and colors fillers (orange), repairs (magenta) and laughter (green) in both
+layers. If the status line says
 processing is falling behind, `--model fujielab/icefall_asr_csj_cejc_reazon_medium_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`
 gives the same accuracy at about half the compute; `--model` takes any other tag
 or a local model directory.
@@ -256,6 +271,7 @@ streaming minus the word end in the CSJ time annotation (8 CSJ core lectures):
 | Model | Chunks (L1 / L2) | Layer-1 P-TER % | Layer-1 latency | Layer-2 CER % | Layer-2 latency | Laughter F1 | Filler F1 | Repair F1 |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
 | Low-latency Cascade+Event-DP + ReazonSpeech (`…_reazon_large_…_c80_c160_la0`) | 80 / 160 ms | **7.80** | **209 ms** | **11.53** | **345 ms** | 80.8 | 74.1 | 48.7 |
+| the same, marked writing layer (`…_c80_c160_la0_writaux`) | 80 / 160 ms | **7.80** | **209 ms** | 11.71 | 346 ms | 80.8 | 74.1 | 48.7 |
 | Cascade+Event-DP + ReazonSpeech (`…_reazon_medium_…_c160_c640_la0`) | 160 / 640 ms | 7.81 | 279 ms | 11.55 | 583 ms | **81.6** | **74.4** | **49.5** |
 | Cascade+Event-DP, CSJ+CEJC only (`…_csj_cejc_phn_…_ev_cascade_…`) | 160 / 640 ms | 8.05 | 275 ms | 12.30 | 562 ms | 80.5 | 72.5 | 46.3 |
 | Cascade (`…_cascade_…`) | 160 / 640 ms | 7.97 | 356 ms | 12.31 | 589 ms | — | — | — |
@@ -270,7 +286,8 @@ earlier. Adding ReazonSpeech lowers the layer-2 CER by 0.74 points on CSJ+CEJC
 
 | Model | JSUT basic5000 (read) | TEDxJP-10K (lectures) | LaboroTV dev (TV) | ReazonSpeech test (TV) |
 |---|---:|---:|---:|---:|
-| Low-latency Cascade+Event-DP + ReazonSpeech (large) | **9.54** | 13.79 | **15.44** | **9.71** |
+| Low-latency Cascade+Event-DP + ReazonSpeech (large) | **9.54** | 13.79 | 15.44 | **9.71** |
+| the same, marked writing layer | 9.67 | 14.44 | **15.39** | — |
 | Cascade+Event-DP + ReazonSpeech (medium) | 10.01 | **13.31** | 15.77 | 10.34 |
 | Cascade+Event-DP, CSJ+CEJC only | 12.00 | 16.04 | 23.38 | 22.14 |
 
@@ -283,8 +300,8 @@ the CSJ+CEJC-only model is the alternative where that matters.
 The streaming implementation reproduces the evaluation decode (Cascade+Event-DP,
 150 utterances: P-TER 6.36 vs 6.35, CER 7.66 vs 7.74; differences are mostly the
 last 1–2 characters of an utterance) and runs at RTF 0.12 with 4 threads (0.16
-with 1) on an i9-12900K; the low-latency model at 0.22 (0.27 with 1). See the
-model cards for training details.
+with 1) on an i9-12900K; the low-latency models at 0.22–0.23 (0.26–0.27 with 1).
+See the model cards for training details.
 
 ### 2. Two-layer offline Zipformer
 
@@ -292,8 +309,8 @@ model cards for training details.
 (`fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond`,
 84.1 M parameters, 344 MB), for transcribing recordings rather than live audio.
 Both layers see the **whole utterance**, which matters most for repairs (whether a
-word was abandoned is clear only from what follows). Compared with the streaming
-models,
+word was abandoned is clear only from what follows). Compared with most of the
+streaming models (the streaming `…_writaux` model shares both points),
 
 - **layer 2 marks fillers and repairs itself** (`え+F`, `こ+D`), so the written
   form comes out in CSJ notation, `(F えー)昨日(D こ)今度の話`, and laughter as
@@ -350,6 +367,7 @@ whose layer 2 has no marks, they were moved over from layer 1 by time alignment:
 | Offline Cascade large (`…_zipformer_l_offline_writaux_proncond`), marked layer 2 + layer-1 input | **9.05** | **9.70** | **84.6** | **59.8** | **6.13** | **7.50** / **10.32** / **13.34** |
 | Offline Cascade, plain layer 2, same data and schedule (not released) | 9.33 | 10.49 | 81.8 | 54.0 | 6.36 | 8.04 / 10.42 / 13.61 |
 | Streaming low-latency Cascade (`…_c80_c160_la0`) | 11.53 | 12.91 | 79.7 | 44.1 | 7.80 | 9.54 / 13.79 / 15.44 |
+| Streaming low-latency Cascade, marked layer 2 (`…_c80_c160_la0_writaux`) | 11.71 | 12.40 | 83.4 | 54.5 | 7.80 | 9.67 / 14.44 / 15.39 |
 
 The marks in layer 2 cost nothing in CER (+0.04 against the plain layer 2, not
 significant) and raise the filler / repair F1 by 2.8 / 5.7 points. The

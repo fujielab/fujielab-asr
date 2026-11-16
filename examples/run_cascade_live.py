@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Live demo of the two-layer, two-rate Cascade recognizer on the CPU (microphone or audio file).
 
-Layer 1 (phonemes, confirmed every 80 ms with the default low-latency model, 160 ms
+Layer 1 (phonemes, confirmed every 80 ms with the low-latency models, 160 ms
 with the others) is shown as katakana as it arrives, next to layer 2 (kana-kanji,
 every 160 / 640 ms). Fillers (+F) are orange, repairs and word fragments (+D)
-magenta, laughter (Event-DP models only) green.
+magenta, laughter (Event-DP models only) green. With the default model (…_writaux)
+layer 2 marks fillers and repairs as well; with the others only layer 1 does.
 
     pip install "fujielab-asr[cascade]" sounddevice soxr rich
     python examples/run_cascade_live.py                    # default input device (microphone)
@@ -31,9 +32,10 @@ import numpy as np
 import torch
 
 from fujielab.asr.icefall_ext import P2Kana, Speech2TextCascade
-from fujielab.asr.icefall_ext.cascade_zipformer import FRAME_S, SR
+from fujielab.asr.icefall_ext.cascade_zipformer import FRAME_S, SR, _split_marker
 
-MODEL = "fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0"  # low latency (80 / 160 ms)
+MODEL = "fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0_writaux"  # low latency, marked writing layer
+MODEL_C80 = "fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0"  # same, unmarked writing layer
 MODEL_C160 = "fujielab/icefall_asr_csj_cejc_reazon_medium_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0"  # 160 / 640 ms
 MODEL_X10A = "fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0"  # CSJ+CEJC only
 MODEL_X6 = "fujielab/icefall_asr_csj_cejc_phn_writ_comp_cascade_zipformer_stream_c160_c640_la0"  # no events
@@ -76,7 +78,19 @@ class Segments:
         return t
 
     def grapheme(self):
-        return "".join(t for t in self.g if not t.startswith("<"))
+        """Layer 2 as rich.Text; with the marked writing layer (…_writaux), fillers / repairs / laughter are colored."""
+        from rich.text import Text
+
+        t, laughing = Text(), False
+        for tok in self.g:
+            base, mark = _split_marker(tok)
+            if base == "<laugh>":
+                t.append("<笑>", style=STYLE["laugh"])
+            elif base in ("<L>", "</L>"):
+                laughing = base == "<L>"
+            elif not base.startswith("<"):
+                t.append(base, style=STYLE["L"] if laughing and mark not in ("F", "D") else STYLE.get(mark, ""))
+        return t
 
     def reset(self):
         self.p, self.g, self.t_start = [], [], None
@@ -105,7 +119,7 @@ def run_live(s2t: Speech2TextCascade, blocks, pause=1.2, realtime_src=True):
         t.add_column(no_wrap=True, width=5)
         t.add_column(overflow="fold")
         t.add_row(Text(" kana", style="bold"), kana)
-        t.add_row(Text(" text", style="bold"), Text(graph))
+        t.add_row(Text(" text", style="bold"), graph)
         return t
 
     def finished_lines(s, k):
@@ -130,7 +144,7 @@ def run_live(s2t: Speech2TextCascade, blocks, pause=1.2, realtime_src=True):
     con.print(f"[bold]Cascade live demo[/bold]  model: {s2t.cfg['name']}  "
               f"(layer 1 every {s2t.cfg['chunk_size'] * 20} ms, layer 2 every {s2t.chunk2 * 40} ms)")
     con.print("[dim]Layer-1 phonemes shown as katakana ([orange1]filler[/orange1], [magenta]repair[/magenta], "
-              "[green]laughter[/green]). Ctrl+C to quit.[/dim]\n")
+              "[green]laughter[/green]; in the text too with …_writaux). Ctrl+C to quit.[/dim]\n")
     try:
         with Live(render(), console=con, refresh_per_second=12, transient=True) as live:
             for x in blocks:
@@ -245,7 +259,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model", default=MODEL,
                     help=f"Hugging Face tag or local model directory (default: the low-latency Cascade+Event-DP "
-                         f"trained with ReazonSpeech, 80 / 160 ms chunks; 160 / 640 ms chunks, half the compute: "
+                         f"trained with ReazonSpeech, 80 / 160 ms chunks, writing layer with filler / repair marks; "
+                         f"the same with an unmarked writing layer: {MODEL_C80}; "
+                         f"160 / 640 ms chunks, half the compute: "
                          f"{MODEL_C160}; CSJ+CEJC only: {MODEL_X10A}; without events: {MODEL_X6})")
     ap.add_argument("--device", default=None, help="input device number or part of its name")
     ap.add_argument("--list-devices", action="store_true")
@@ -274,7 +290,7 @@ def main():
             r = s2t(read_audio(path))[0]
             print(f"{path}\tP\t{' '.join(r.tokens)}")
             print(f"{path}\tK\t{r.kana}")
-            print(f"{path}\tG\t{r.text}")
+            print(f"{path}\tG\t{r.tagged_text}")
         return
     if args.bench:
         bench(s2t)
