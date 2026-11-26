@@ -13,13 +13,20 @@ Whisper large-v3 + LoRA。ストリーミングのモデルは音声を少しず
 
 ## モデルの入手
 
-この README に載っている学習済みモデルは、Hugging Face Hub 上で **非公開（private）** です。
 パッケージのコードは Apache License 2.0 で公開しています。
-モデルの利用を希望される方は、藤江（ **shinya.fujie@chibatech.ac.jp** ）までご連絡ください。
-ただし、学習に使ったコーパスの条件により、研究室の外へのモデルの提供には制限があります（下の「ライセンス」を参照）。
+学習済みモデルのうち、おすすめの 2 つは Hugging Face Hub で **Gated（申請制）** にしています。
+モデルのページで利用を申請し、承認されれば（手動で確認します）、 **研究目的に限って** （商業利用は不可）使えます。
 
-ここに載っている例は、研究室内部での利用を想定しています。
-`from_pretrained` は、モデルを読めるアカウントでログイン
+- [`fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0_writaux`](https://huggingface.co/fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0_writaux)
+  — ストリーミング、低遅延、書字形にもフィラー・言い直しの印が付く
+- [`fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond`](https://huggingface.co/fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond)
+  — オフライン、録音した音声の書き起こし向け
+
+この README に載っているほかのモデルは **非公開（private）** です。利用を希望される方は、
+藤江（ **shinya.fujie@chibatech.ac.jp** ）までご連絡ください。ただし、学習に使ったコーパスの条件により、
+研究室の外への提供には制限があります（下の「ライセンス」を参照）。これらのモデルを使う例は、研究室内部での利用を想定しています。
+
+`from_pretrained` は、モデルを読めるアカウント（Gated のモデルでは、申請が承認されたアカウント）でログイン
 していれば（`hf auth login` か `HF_TOKEN`）Hub からモデルをダウンロードします。
 手元にあるモデルも読み込めます（ESPnet と Whisper のモデルはまとめた `.zip`、sherpa-onnx と Cascade の
 モデルはモデルのフォルダを渡します）。
@@ -104,13 +111,14 @@ pip install -e .
 
 ## 学習済みモデル
 
-`from_pretrained` にタグを渡して読み込みます。すべて非公開です（「モデルの入手」を参照）。
+`from_pretrained` にタグを渡して読み込みます。 **Gated** と書いた 2 つは申請すれば研究目的で使え、
+ほかは非公開です（「モデルの入手」を参照）。
 下の「使い方」と同じ順に並べています。
 
 1. **2 層ストリーミング Zipformer（Cascade）** — `Speech2TextCascade`: フィラー・言い直し・笑いの印付きの音素列と
    書字形。CPU で実時間（`cascade` extra。[使い方](#1-2-層ストリーミング-zipformercascade)）
    - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0_writaux`
-     — **おすすめ** （デモの既定）: 低遅延（80 / 160 ms チャンク、先読みなし）、CSJ+CEJC+ReazonSpeech。
+     — **Gated** 、 **おすすめ** （デモの既定）: 低遅延（80 / 160 ms チャンク、先読みなし）、CSJ+CEJC+ReazonSpeech。
      書字形にもフィラー・言い直しの印が付く
    - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0`
      — 層 1 は上と同じで、書字形に印が付かないもの
@@ -121,7 +129,7 @@ pip install -e .
    - `fujielab/icefall_asr_csj_cejc_phn_writ_comp_cascade_zipformer_stream_c160_c640_la0` — 以前の版（イベントなし）
 2. **2 層オフライン Zipformer** — `Speech2TextCascadeOffline`: 録音の書き起こし向け。書字形そのものに
    `(F えー)`・`(D こ)` の印が付きます（`cascade` extra。[使い方](#2-2-層オフライン-zipformer)）
-   - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond` — **既定**
+   - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond` — **Gated** 、 **既定**
    - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_l_offline_writaux_proncond`
      — 大きい版（1.9 億パラメータ）: 少し精度が高く、時間は約 1.4 倍
 3. **sherpa-onnx によるストリーミング Zipformer** — `Speech2TextSherpaOnnx`: 合成トークンの印付きのカナ。
@@ -151,6 +159,24 @@ pip install -e .
 
 上と同じ順に、モデルの種類ごとに、インストール・最小の例・`examples/` の実行できるスクリプト・結果を示します。
 入力には `examples/aps-smp.mp3`（CSJ のサンプル音声、35 秒）が使えます。
+
+**コマンドライン.** `cascade` extra を入れると、`fujielab-asr` コマンドで、Gated の 2 つのモデルを使って
+音声ファイルを書き起こせます（先に利用を申請してください。「モデルの入手」を参照）。ファイルを無音で区切り、区間ごとに、
+フィラー・言い直しの印付きの書字形と発音（カタカナ）を出します。
+
+```bash
+pip install "fujielab-asr[cascade]"
+hf auth login                                          # 申請が承認されたアカウントでログイン
+fujielab-asr examples/aps-smp.mp3                      # オフラインのモデル
+fujielab-asr --model streaming examples/aps-smp.mp3    # 低遅延のストリーミングのモデル（100 ms ずつ渡す）
+fujielab-asr --format jsonl a.wav b.wav > out.jsonl    # 区間ごとに 1 行の JSON
+```
+
+```
+#1  0.00-4.37 s
+  text: (F え)パラ言語情報ということなんですが(F あ)簡単に最初に(F えー)
+  kana: (F エ)、パラゲンゴジョーホート ユー コトナ ンデスガ (F ア) カンタンニ サイショニ (F エー)
+```
 
 ### 1. 2 層ストリーミング Zipformer（Cascade）
 
@@ -205,8 +231,9 @@ Cascade のモデルはどれも同じ呼び方・同じ層 1 の記号で（イ
 ほかのモデルでは `tagged_text` は `text` と同じです。`…_writaux` の層 1 は `…_c80_c160_la0` のものをそのまま固定し、
 層 2 を印付きで、層 1 の記号も入力に加えて学習し直しています（そのための層 1 の貪欲探索は書き出したモジュールの中で
 回るので、呼び出し側からは違いがありません）。低遅延モデルの計算量は
-160 / 640 ms のモデルの約 2 倍です。タグを渡さない `from_pretrained()` は、CSJ+CEJC のみの Cascade+Event-DP モデル
-（`fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`）を読み込みます。
+160 / 640 ms のモデルの約 2 倍です。タグを渡さない `from_pretrained()` は、Gated の、書字層に印が付く低遅延モデル（`…_c80_c160_la0_writaux`）を
+読み込みます（0.7.0 より前は、CSJ+CEJC のみの Cascade+Event-DP モデルでした）。`result.tagged_kana` は、層 1 の
+カタカナに CSJ の表記で印を付けたもの（`(F エー)` / `(D コ)` / `<笑>`）です。
 
 **ライブデモ.** `examples/run_cascade_live.py` は、話している最中に層 1（カタカナ）と層 2 を並べて表示します
 （ノート PC の CPU で動きます）:
@@ -550,5 +577,6 @@ s2t = Speech2Text.from_pretrained(
   学習データとして使っています。CDLA-Sharing-1.0 で配布され、利用は著作権法第 30 条の 4 の目的に限られます。
 
 どのモデルも学習データに CSJ と CEJC の少なくとも一方を含むので、すべてのモデルに CSJ・CEJC の条件が及びます。
-モデルは商業目的には使えず、研究目的であっても、研究室の外へ提供することはこれらの条件のもとでは難しい場合が
-あります。モデルを使った研究成果を発表するときは、このリポジトリを引用してください（上の「引用・謝辞」）。
+モデルは商業目的には使えません。Gated の 2 つのモデルは、研究目的に限り、
+研究成果の発表でこのリポジトリを引用することを条件に提供しています。ほかのモデルを研究室の外へ提供することは、
+これらの条件のもとでは難しい場合があります。モデルを使った研究成果を発表するときは、このリポジトリを引用してください（上の「引用・謝辞」）。

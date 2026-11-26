@@ -283,13 +283,16 @@ def main():
     torch.set_num_interop_threads(1)
 
     print(f"loading {args.model} ({torch.get_num_threads()} threads)", file=sys.stderr)
-    s2t = Speech2TextCascade.from_pretrained(args.model)
+    try:
+        s2t = Speech2TextCascade.from_pretrained(args.model)
+    except PermissionError as e:  # gated model without approved access, or a private one
+        sys.exit(f"error: {e}")
 
     if args.wav is not None and args.plain:
         for path in args.wav:
             r = s2t(read_audio(path))[0]
             print(f"{path}\tP\t{' '.join(r.tokens)}")
-            print(f"{path}\tK\t{r.kana}")
+            print(f"{path}\tK\t{r.tagged_kana}")
             print(f"{path}\tG\t{r.tagged_text}")
         return
     if args.bench:

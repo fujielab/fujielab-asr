@@ -38,6 +38,7 @@ from .cascade_zipformer import (
     _Greedy,
     _load_tokens,
     make_cascade_result,
+    resolve_model_dir,
 )
 
 DEFAULT_OFFLINE_MODEL = "fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond"
@@ -105,13 +106,7 @@ class Speech2TextCascadeOffline:
         **kwargs,
     ) -> "Speech2TextCascadeOffline":
         """Download from the Hugging Face Hub (345 MB), or use a local directory."""
-        if os.path.isdir(model_tag):
-            model_dir = model_tag
-        else:
-            from huggingface_hub import snapshot_download
-
-            model_dir = snapshot_download(model_tag, cache_dir=cache_dir)
-        return cls(model_dir, **kwargs)
+        return cls(resolve_model_dir(model_tag, cache_dir), **kwargs)
 
     # -------------------------------------------------------------- pieces
     def fbank(self, speech: Union[np.ndarray, Sequence[float]]) -> np.ndarray:

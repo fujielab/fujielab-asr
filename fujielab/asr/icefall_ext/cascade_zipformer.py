@@ -39,6 +39,8 @@ FRAME_S = 0.04  # output frame of both layers (25 Hz)
 
 _COMPOSITE = re.compile(r"^(?P<base>.+?)\+(?P<mark>[FD])$")
 _SKIP = {"[ja]"}  # language tag at the start of every layer-1 hypothesis
+# the recommended low-latency model, gated on the Hub (request access for research use)
+DEFAULT_STREAMING_MODEL = "fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0_writaux"
 
 
 # ----------------------------------------------------------------------------- phonemes -> kana
@@ -106,6 +108,30 @@ class P2Kana:
         items, pending = self.convert(toks)
         return "".join(s for s, _ in items).strip() + "".join(pending)
 
+    def to_tagged_text(self, toks: Sequence[str]) -> str:
+        """Katakana with the marks in CSJ notation: ``(F エー)`` filler, ``(D コ)`` repair / fragment,
+        ``<笑>`` laughter, ``(笑 …)`` speech while laughing (as ``tagged_text`` does for layer 2)."""
+        items, pending = self.convert(toks)
+        out, cur = [], ""  # cur: label of the open tag ("F" / "D" / "L")
+        for s, lab in items:
+            lab = lab if lab in ("F", "D", "L") else ""
+            if s in (" ", "、") and cur == "L":  # word boundaries / pauses do not end speech while laughing
+                lab = "L"
+            if lab != cur:
+                if cur:
+                    out.append(")")
+                if lab:
+                    out.append("(笑 " if lab == "L" else f"({lab} ")
+                cur = lab
+            out.append("<笑>" if s == "（笑）" else s)
+        if cur:
+            out.append(")")
+        text = "".join(out)
+        text = re.sub(r"\((?:[FD]|笑) ([ 、]*)\)", r"\1", text)  # tags left empty
+        text = re.sub(r"([ 、]+)\)", r")\1", text)               # move a trailing space / pause out of the tag
+        text = re.sub(r"(\((?:[FD]|笑) )([ 、]+)", r"\2\1", text)  # and a leading one
+        return text.strip() + "".join(pending)
+
 
 # ----------------------------------------------------------------------------- search
 class _Greedy:
@@ -159,7 +185,8 @@ class CascadeResult:
     boundary, ``<sp>`` pause, ``<laugh>``, ``<L>`` ... ``</L>``; the ``[ja]`` language
     tag is dropped), ``aux_labels`` the marker per token (``N`` / ``F`` / ``D``) and
     ``base_tokens`` the tokens with the marker removed, as in the other results of
-    this package. ``kana`` is layer 1 converted to katakana.
+    this package. ``kana`` is layer 1 converted to katakana, and ``tagged_kana`` the
+    same with the marks in CSJ notation, ``(F エー)`` / ``(D コ)`` / ``<笑>`` / ``(笑 …)``.
 
     Layer 2: ``text`` is the written form; ``graphemes`` / ``grapheme_timestamps`` /
     ``grapheme_confidences`` are its symbols. In the streaming models layer 2 runs on
@@ -168,7 +195,8 @@ class CascadeResult:
     ``え+F`` / ``こ+D`` there as well: ``base_graphemes`` / ``grapheme_aux_labels``
     split them like layer 1, ``text`` drops the marks, and ``tagged_text`` writes
     them as in CSJ, ``(F えー)`` / ``(D こ)``, with laughter as ``<笑>`` / ``(笑 …)``
-    (for the streaming models it is ``text`` plus any laughter). ``text`` leaves the
+    (so does the streaming ``…_c80_c160_la0_writaux``; for the other streaming
+    models it is ``text`` plus any laughter). ``text`` leaves the
     laughter symbols (``<laugh>``, ``<L>``, ``</L>``) out; ``graphemes`` keeps them.
 
     Timestamps are seconds from the start of the utterance (start of the 40 ms
@@ -188,6 +216,7 @@ class CascadeResult:
     tagged_text: str = ""
     base_graphemes: List[str] = field(default_factory=list)
     grapheme_aux_labels: List[str] = field(default_factory=list)
+    tagged_kana: str = ""
 
 
 def _split_marker(token: str):
@@ -266,7 +295,34 @@ def make_cascade_result(p2k: "P2Kana", ev1, ev2) -> CascadeResult:
         tagged_text=_tagged_text(gbase, gaux),
         base_graphemes=gbase,
         grapheme_aux_labels=gaux,
+        tagged_kana=p2k.to_tagged_text(tokens),
     )
+
+
+def resolve_model_dir(model_tag: str, cache_dir: Optional[str] = None) -> str:
+    """A local model directory as is, else download the Hugging Face repository ``model_tag``.
+
+    Turns the Hub's access errors into a message saying what to do: request access on the
+    model page for a gated model, or log in with an account that can read a private one.
+    """
+    if os.path.isdir(model_tag):
+        return model_tag
+    from huggingface_hub import snapshot_download
+    from huggingface_hub.errors import GatedRepoError, RepositoryNotFoundError
+
+    url = f"https://huggingface.co/{model_tag}"
+    try:
+        return snapshot_download(model_tag, cache_dir=cache_dir)
+    except GatedRepoError as e:
+        raise PermissionError(
+            f"{model_tag} is a gated model. Request access at {url} (research use only), and after the request "
+            "is approved, log in with the same account (`hf auth login` or the HF_TOKEN environment variable)."
+        ) from e
+    except RepositoryNotFoundError as e:
+        raise PermissionError(
+            f"{model_tag} was not found or is private. Check the tag, and log in with an account that can read it "
+            "(`hf auth login` or HF_TOKEN); the gated models can be requested on their Hugging Face pages."
+        ) from e
 
 
 # ----------------------------------------------------------------------------- recognizer
@@ -326,18 +382,12 @@ class Speech2TextCascade:
     @classmethod
     def from_pretrained(
         cls,
-        model_tag: str = "fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0",
+        model_tag: str = DEFAULT_STREAMING_MODEL,
         cache_dir: Optional[str] = None,
         **kwargs,
     ) -> "Speech2TextCascade":
         """Download from the Hugging Face Hub (345 MB), or use a local directory."""
-        if os.path.isdir(model_tag):
-            model_dir = model_tag
-        else:
-            from huggingface_hub import snapshot_download
-
-            model_dir = snapshot_download(model_tag, cache_dir=cache_dir)
-        return cls(model_dir, **kwargs)
+        return cls(resolve_model_dir(model_tag, cache_dir), **kwargs)
 
     # -------------------------------------------------------------- low level
     def reset(self) -> None:

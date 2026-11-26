@@ -16,15 +16,24 @@ time on the CPU.
 
 ## Model availability
 
-The pretrained models listed in this README are **private** on the Hugging Face
-Hub. The code in this package is public under the Apache License 2.0. To use the
-models, please contact Shinya Fujie at **shinya.fujie@chibatech.ac.jp**. Note that
-the terms of the training corpora limit providing the models outside the
-laboratory (see *License* below).
+The code in this package is public under the Apache License 2.0. Of the
+pretrained models, two recommended ones are **gated** on the Hugging Face Hub: they
+can be used **for research purposes only** (not for commercial use) after you
+request access on the model page and the request is approved (reviewed manually):
 
-The examples here assume use within the laboratory. `from_pretrained` downloads a
-model from the Hub when you are logged in (`hf auth login` or `HF_TOKEN`) with an
-account that can read it. It also accepts a local copy (the packed `.zip` for the
+- [`fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0_writaux`](https://huggingface.co/fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0_writaux)
+  — streaming, low latency, written form with filler / repair marks
+- [`fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond`](https://huggingface.co/fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond)
+  — offline, for transcribing recordings
+
+The other models listed in this README are **private**. For them, please contact
+Shinya Fujie at **shinya.fujie@chibatech.ac.jp**; the terms of the training
+corpora limit providing them outside the laboratory (see *License* below), and
+the examples that use them assume use within the laboratory.
+
+`from_pretrained` downloads a model from the Hub when you are logged in
+(`hf auth login` or `HF_TOKEN`) with an account that can read it (for the gated
+models, an account whose access request has been approved). It also accepts a local copy (the packed `.zip` for the
 ESPnet and Whisper models, the model directory for the sherpa-onnx and Cascade
 models).
 
@@ -126,14 +135,15 @@ pip install -e .
 
 ## Pretrained models
 
-Loaded by tag with `from_pretrained`; all are private (see *Model availability*
-above). Listed in the order of *Example Usage* below.
+Loaded by tag with `from_pretrained`. The two marked **gated** can be used for
+research after requesting access; the others are private (see *Model
+availability* above). Listed in the order of *Example Usage* below.
 
 1. **Two-layer streaming Zipformer ("Cascade")** — `Speech2TextCascade`: phonemes
    with filler / repair / laughter marks + the written form, CPU real time
    (`cascade` extra; [usage](#1-two-layer-streaming-zipformer-cascade))
    - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0_writaux`
-     — **recommended** (demo default): low latency (80 / 160 ms chunks, no look-ahead), CSJ+CEJC+ReazonSpeech;
+     — **gated**, **recommended** (demo default): low latency (80 / 160 ms chunks, no look-ahead), CSJ+CEJC+ReazonSpeech;
      the written form also carries the filler / repair marks
    - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_stream_c80_c160_la0`
      — the same layer 1 with an unmarked written form
@@ -145,7 +155,7 @@ above). Listed in the order of *Example Usage* below.
 2. **Two-layer offline Zipformer** — `Speech2TextCascadeOffline`: for recordings;
    the written form itself carries the marks, `(F えー)`, `(D こ)`
    (`cascade` extra; [usage](#2-two-layer-offline-zipformer))
-   - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond` — **default**
+   - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_offline_writaux_proncond` — **gated**, **default**
    - `fujielab/icefall_asr_csj_cejc_reazon_large_phn_writ_comp_ev_cascade_zipformer_l_offline_writaux_proncond`
      — larger (190 M): a little more accurate, about 1.4 × the time
 3. **Streaming Zipformer via sherpa-onnx** — `Speech2TextSherpaOnnx`: kana with
@@ -178,6 +188,26 @@ above). Listed in the order of *Example Usage* below.
 One subsection per model family, in the order above: install, a minimal example,
 the runnable script in `examples/`, and results. `examples/aps-smp.mp3` (35 s of
 CSJ sample audio) can be used as input.
+
+**Command line.** With the `cascade` extra, the `fujielab-asr` command
+transcribes audio files with the two gated models (request access first; see
+*Model availability*). It cuts each file at pauses and prints, per segment, the
+written form and the pronunciation (katakana), both with the filler / repair
+marks:
+
+```bash
+pip install "fujielab-asr[cascade]"
+hf auth login                                          # the account whose access request was approved
+fujielab-asr examples/aps-smp.mp3                      # offline model
+fujielab-asr --model streaming examples/aps-smp.mp3    # low-latency streaming model, fed 100 ms at a time
+fujielab-asr --format jsonl a.wav b.wav > out.jsonl    # one JSON object per segment
+```
+
+```
+#1  0.00-4.37 s
+  text: (F え)パラ言語情報ということなんですが(F あ)簡単に最初に(F えー)
+  kana: (F エ)、パラゲンゴジョーホート ユー コトナ ンデスガ (F ア) カンタンニ サイショニ (F エー)
+```
 
 ### 1. Two-layer streaming Zipformer ("Cascade")
 
@@ -243,8 +273,10 @@ frozen while its layer 2 was retrained with the marks and with the layer-1
 symbols as extra input (the layer-1 greedy search for that runs inside the
 exported module, so the caller sees no difference). The
 low-latency model needs about twice the compute of the 160 / 640 ms models.
-`from_pretrained()` without a tag loads the CSJ+CEJC-only Cascade+Event-DP
-model (`fujielab/icefall_asr_csj_cejc_phn_writ_comp_ev_cascade_zipformer_stream_c160_c640_la0`).
+`from_pretrained()` without a tag loads the gated low-latency model with the
+marked writing layer (`…_c80_c160_la0_writaux`; before 0.7.0 it was the
+CSJ+CEJC-only Cascade+Event-DP model). `result.tagged_kana` is layer 1 in
+katakana with the marks in CSJ notation, `(F エー)` / `(D コ)` / `<笑>`.
 
 **Live demo.** `examples/run_cascade_live.py` shows layer 1 (as katakana) and
 layer 2 side by side while you speak, on a laptop CPU:
@@ -628,7 +660,9 @@ corpora below, and their terms carry over to the models:
   use limited to the purposes of Article 30-4 of the Japanese Copyright Act.
 
 Every model includes CSJ and / or CEJC in its training data, so the CSJ / CEJC
-terms apply to all of them: the models are not for commercial use, and providing
-them to anyone outside the laboratory, even for research, may not be possible
-under these terms. When publishing results obtained with the models, please cite
+terms apply to all of them: the models are not for commercial use. The two gated
+models are provided for research purposes only, on condition that publications
+using them cite this repository. Providing
+the other models to anyone outside the laboratory may not be possible under these
+terms. When publishing results obtained with the models, please cite
 this repository (see *Citation and acknowledgments* above).
