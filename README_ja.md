@@ -506,6 +506,30 @@ s2t = Speech2Text.from_pretrained(
 スクリプト: `examples/run_streaming_asr.py`（ファイル）、`examples/run_streaming_asr_live.py`（マイク、Silero VAD 付き）、
 `examples/demo.py`（Gradio、発話単位）。
 
+## 引用・謝辞
+
+**コーパスの引用.** モデルを使った研究成果を発表するときは、国立国語研究所の求めに従い、学習に使ったコーパスを
+引用してください。
+
+- **CSJ** （タグに `csj` を含むモデルと `…_cc0105`）
+  - 日本語の論文: 国立国語研究所 (2006)「日本語話し言葉コーパスの構築法」国立国語研究所.
+    <https://doi.org/10.15084/00001357>
+  - 日本語以外の論文: Kikuo Maekawa, "Corpus of Spontaneous Japanese: Its design and evaluation,"
+    *Proc. ISCA & IEEE Workshop on Spontaneous Speech Processing and Recognition (SSPR 2003)*, pp. 7–12, 2003.
+    <https://www.isca-archive.org/sspr_2003/maekawa03_sspr.html>
+- **CEJC** （タグに `cejc` を含むモデルと `…_cc0105`）
+  - 日本語の論文: 小磯花絵・天谷晴香・居關友里子・臼田泰如・柏野和佳子・川端良子・田中弥生・伝康晴・西川賢哉・渡邊友香
+    「『日本語日常会話コーパス』設計と構築」『国立国語研究所論集』24, pp. 153–168, 2023.
+    <https://doi.org/10.15084/00003692>
+  - 日本語以外の論文: Hanae Koiso, Haruka Amatani, Yasuharu Den, Yuriko Iseki, Yuichi Ishimoto, Wakako Kashino,
+    Yoshiko Kawabata, Ken'ya Nishikawa, Yayoi Tanaka, Yuka Watanabe and Yasuyuki Usuda, "Design and Evaluation of
+    the Corpus of Everyday Japanese Conversation," *Proc. LREC 2022*, pp. 5587–5594, 2022.
+    <https://aclanthology.org/2022.lrec-1.599/>
+
+**謝辞.** 本研究は、国立国語研究所 共同研究プロジェクト「多世代会話コーパスに基づく話し言葉の総合的研究」
+（プロジェクトリーダー: 小磯花絵）の一環として行ったもので、JSPS 科研費 JP25K15211
+（「音声インタラクションにおける円滑性の客観評価指標の構築」）の助成を受けています。
+
 ## ライセンス
 
 **コード.** このパッケージのコードは Apache License 2.0 です（[LICENSE](LICENSE)）。
@@ -525,4 +549,4 @@ s2t = Speech2Text.from_pretrained(
 
 どのモデルも学習データに CSJ と CEJC の少なくとも一方を含むので、すべてのモデルに CSJ・CEJC の条件が及びます。
 モデルは商業目的には使えず、研究目的であっても、研究室の外へ提供することはこれらの条件のもとでは難しい場合が
-あります。モデルを使った研究成果を発表するときは、このリポジトリと、使ったコーパスを引用してください。
+あります。モデルを使った研究成果を発表するときは、このリポジトリと、使ったコーパスを引用してください（上の「引用・謝辞」）。

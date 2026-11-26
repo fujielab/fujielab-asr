@@ -575,6 +575,31 @@ s2t = Speech2Text.from_pretrained(
 Scripts: `examples/run_streaming_asr.py` (a file), `examples/run_streaming_asr_live.py`
 (microphone, with Silero VAD) and `examples/demo.py` (Gradio, utterance-level).
 
+## Citation and acknowledgments
+
+**Corpora.** When publishing results obtained with the models, please cite the
+corpora they were trained on, as NINJAL requests:
+
+- **CSJ** (models with `csj` in the tag, and `…_cc0105`): Kikuo Maekawa, "Corpus
+  of Spontaneous Japanese: Its design and evaluation," *Proc. ISCA & IEEE Workshop
+  on Spontaneous Speech Processing and Recognition (SSPR 2003)*, pp. 7–12, 2003.
+  <https://www.isca-archive.org/sspr_2003/maekawa03_sspr.html>
+  (for papers in Japanese: 国立国語研究所 (2006)「日本語話し言葉コーパスの構築法」,
+  <https://doi.org/10.15084/00001357>)
+- **CEJC** (models with `cejc` in the tag, and `…_cc0105`): Hanae Koiso, Haruka
+  Amatani, Yasuharu Den, Yuriko Iseki, Yuichi Ishimoto, Wakako Kashino, Yoshiko
+  Kawabata, Ken'ya Nishikawa, Yayoi Tanaka, Yuka Watanabe and Yasuyuki Usuda,
+  "Design and Evaluation of the Corpus of Everyday Japanese Conversation,"
+  *Proc. LREC 2022*, pp. 5587–5594, 2022. <https://aclanthology.org/2022.lrec-1.599/>
+  (for papers in Japanese: 小磯花絵ほか「『日本語日常会話コーパス』設計と構築」
+  『国立国語研究所論集』24, pp. 153–168, 2023, <https://doi.org/10.15084/00003692>)
+
+**Acknowledgments.** This work was conducted as part of the NINJAL collaborative
+research project "多世代会話コーパスに基づく話し言葉の総合的研究" (comprehensive
+study of spoken language based on a multi-generational conversation corpus;
+project leader: Hanae Koiso), and was supported by JSPS KAKENHI Grant Number JP25K15211
+("Development of objective metrics for smoothness in speech interactions").
+
 ## License
 
 **Code.** The code of this package is under the Apache License 2.0; see
@@ -602,4 +627,4 @@ Every model includes CSJ and / or CEJC in its training data, so the CSJ / CEJC
 terms apply to all of them: the models are not for commercial use, and providing
 them to anyone outside the laboratory, even for research, may not be possible
 under these terms. When publishing results obtained with the models, please cite
-this repository and the corpora used.
+this repository and the corpora used (see *Citation and acknowledgments* above).
