@@ -5,6 +5,9 @@ English | [日本語](https://github.com/fujielab/fujielab-asr/blob/main/README_
 Japanese speech recognition from Fujie Laboratory (Chiba Institute of Technology)
 that transcribes **fillers and repairs** along with the words.
 
+**Try it in your browser:** [online demo on Hugging Face Spaces](https://huggingface.co/spaces/fujie/fujielab-asr-demo) — record or upload
+up to 60 s of audio and see the transcription with filler / repair marks (offline model).
+
 `fujielab-asr` puts several recognizer families behind one `from_pretrained`
 interface: two-layer Zipformer models that give phonemes and the written form
 (streaming or offline, icefall-trained, run as TorchScript), a streaming Zipformer

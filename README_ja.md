@@ -4,6 +4,9 @@
 
 千葉工業大学 藤江研究室の日本語音声認識です。単語に加えて **フィラー・言い直し** も書き起こします。
 
+**ブラウザで試せます:** [Hugging Face Spaces のデモ](https://huggingface.co/spaces/fujie/fujielab-asr-demo) で、録音するか音声ファイル（60 秒まで）を選ぶと、
+フィラー・言い直しの印付きの書き起こしを見られます（オフラインのモデル）。
+
 `fujielab-asr` は、いくつかの種類の認識器を同じ `from_pretrained` の呼び方で使えるようにしたパッケージです:
 音素列と書字形を出す 2 層の Zipformer（ストリーミング版とオフライン版。icefall で学習し、TorchScript で実行）、
 sherpa-onnx で動かすストリーミング Zipformer、[ESPnet](https://github.com/espnet/espnet) の上に作った
